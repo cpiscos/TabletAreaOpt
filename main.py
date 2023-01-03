@@ -366,7 +366,7 @@ def main():
     results_queue_ = multiprocessing.Queue()
 
     acquisition_function_optimal = UtilityFunction(kind="ucb", kappa=0)
-    acquisition_function = UtilityFunction(kind='ei', xi=1e-1)
+    acquisition_function = UtilityFunction(kind='ei', xi=1e-2)
 
     optimal_optimizer_process = multiprocessing.Process(
         target=OptimizerWorker,
