@@ -121,13 +121,7 @@ def run_game(params, results, optimal_params, stat_visuals, screen, font, config
     color = (0, 0, 255)  # blue
     next_color = (0, 255, 0)  # green
     colors = [color, next_color]
-    if not area_width / 2 + center_x - area_width * 420 / 2560 < config['right']:
-        return 0, True
-    if not area_height / 2 + center_y < config['bottom']:
-        return 0, True
-    if not center_x - area_width / 2 + area_width * 420 / 2560 > config['left']:
-        return 0, True
-    if not center_y - area_height / 2 > config['top']:
+    if check_bounds(params, config)[0]:
         return 0, True
     score = 0
     (tablet_area_width, tablet_area_height, tablet_center_x, tablet_center_y) = convert_to_tablet_coordinates(
@@ -236,7 +230,24 @@ def run_configurator(screen, font, config):
     return config
 
 
-def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue, config, acquisition_function, probe=None, log=False):
+def check_bounds(params, config):
+    area_width = params['area_width']
+    area_height = params['area_height']
+    center_x = params['center_x']
+    center_y = params['center_y']
+    if not area_width / 2 + center_x - area_width * 420 / 2560 < config['right']:
+        return True, 'right'
+    if not area_height / 2 + center_y < config['bottom']:
+        return True, 'bottom'
+    if not center_x - area_width / 2 + area_width * 420 / 2560 > config['left']:
+        return True, 'left'
+    if not center_y - area_height / 2 > config['top']:
+        return True, 'top'
+    return False, None
+
+
+def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue, config,
+                    acquisition_function, probe=None, log=False):
     pbounds = {
         'area_width' : (350, (config['right'] - config['left']) * (2560 + 2 * 420) / 2560),
         'area_height': (250, config['bottom'] - config['top']),
@@ -282,7 +293,11 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
                 y = [res['target'] for res in optimizer.res]
                 results[param] = x
                 results['target'] = y
-            suggestion_queue.put((suggestion, suggestion_as_array, results))
+            if log and check_bounds(suggestion, config)[0]:
+                results_queue.put((suggestion_as_array, 0, results))
+                continue
+            else:
+                suggestion_queue.put((suggestion, suggestion_as_array, results))
         if not results_queue.empty():
             params, score, running = results_queue.get()
             if not running:
@@ -381,7 +396,6 @@ def main():
     )
     optimizer_process.daemon = True
     optimizer_process.start()
-
 
     while True:
         x_probe, x_probe_as_array, results = suggestion_queue.get()
