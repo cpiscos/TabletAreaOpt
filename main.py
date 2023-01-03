@@ -105,11 +105,17 @@ class StatVisuals:
         return self.plot_results_
 
 
-def run_game(params, results, optimizer_max, stat_visuals, screen, font, config):
+def run_game(params, results, optimal_params, stat_visuals, screen, font, config):
     area_width = params['area_width']
     area_height = params['area_height']
     center_x = params['center_x']
     center_y = params['center_y']
+    optimal_area_width = optimal_params['area_width']
+    optimal_area_height = optimal_params['area_height']
+    optimal_center_x = optimal_params['center_x']
+    optimal_center_y = optimal_params['center_y']
+    optimal_area_width, optimal_area_height, optimal_center_x, optimal_center_y = convert_to_tablet_coordinates(
+        optimal_area_width, optimal_area_height, optimal_center_x, optimal_center_y, config)
     radius = 65
     cursor_radius = 20
     color = (0, 0, 255)  # blue
@@ -160,7 +166,9 @@ def run_game(params, results, optimizer_max, stat_visuals, screen, font, config)
                 True,
                 (255, 255, 255))
             screen.blit(text, (10, 10))
-            text1 = font.render(f"{optimizer_max}", True, (255, 255, 255))
+            text1 = font.render(
+                f"Optimal area: {optimal_area_width:.5f}mm x {optimal_area_height:.5f}mm, Center: {optimal_center_x:.5f}mm, {optimal_center_y:.5f}mm",
+                True, (255, 255, 255))
             screen.blit(text1, (10, 30))
             text0 = font.render(f"Press Z or X on the circle with a black center as fast as you can (Q to quit)", True,
                                 (255, 255, 255))
@@ -228,10 +236,10 @@ def run_configurator(screen, font, config):
     return config
 
 
-def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue, config, probe=None):
+def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue, config, acquisition_function, probe=None, log=False):
     pbounds = {
-        'area_width' : (150, config['right'] - config['left']),
-        'area_height': (150, config['bottom'] - config['top']),
+        'area_width' : (350, config['right'] - config['left']),
+        'area_height': (250, config['bottom'] - config['top']),
         'center_x'   : (config['left'], config['right']),
         'center_y'   : (config['top'], config['bottom']),
     }
@@ -245,21 +253,22 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
         print("Loading previous logs...")
         load_logs(optimizer, logs=["./data.json"])
 
-    logger = JSONLogger(path="./data.json", reset=False)
-    optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
+    if log:
+        logger = JSONLogger(path="./data.json", reset=False)
+        optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
     kernel = kernels.Matern() + kernels.WhiteKernel()
-    optimizer.set_gp_params(n_restarts_optimizer=3, normalize_y=True, kernel=kernel)
-    # acquisition_function = UtilityFunction(kind="ucb", kappa=0)
-    acquisition_function = UtilityFunction(kind="ucb", kappa=KAPPA)
-    # acquisition_function = UtilityFunction(kind='ucb')
-    # acquisition_function = UtilityFunction(kind='ei', xi=1e-1)
+    optimizer.set_gp_params(n_restarts_optimizer=3, normalize_y=True, kernel=kernel, alpha=1e-1)
+    # # acquisition_function = UtilityFunction(kind="ucb", kappa=0)
+    # acquisition_function_optimal = UtilityFunction(kind="ucb", kappa=0)
+    # # acquisition_function = UtilityFunction(kind='ucb')
+    # acquisition_function = UtilityFunction(kind='ei', xi=1e-2)
     optimizer._prime_subscriptions()
     optimizer.dispatch(Events.OPTIMIZATION_START)
     results_queue_ = []
     init_points = True if probe is not None else False
 
     while True:
-        if suggestion_queue.empty():
+        if not suggestion_queue.full():
             if probe is None:
                 acquisition_function.update_params()
                 suggestion = optimizer.suggest(acquisition_function)
@@ -273,7 +282,7 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
                 y = [res['target'] for res in optimizer.res]
                 results[param] = x
                 results['target'] = y
-            suggestion_queue.put((suggestion, suggestion_as_array, results, optimizer.max))
+            suggestion_queue.put((suggestion, suggestion_as_array, results))
         if not results_queue.empty():
             params, score, running = results_queue.get()
             if not running:
@@ -351,22 +360,40 @@ def main():
             json.dump(config, f)
 
     stat_visuals = StatVisuals(config)
-    suggestion_queue = multiprocessing.Queue()
+    suggestion_queue = multiprocessing.Queue(maxsize=1)
+    optimal_suggestion_queue = multiprocessing.Queue(maxsize=1)
     results_queue = multiprocessing.Queue()
+    results_queue_ = multiprocessing.Queue()
+
+    acquisition_function_optimal = UtilityFunction(kind="ucb", kappa=0)
+    acquisition_function = UtilityFunction(kind='ei', xi=1e-1)
+
+    optimal_optimizer_process = multiprocessing.Process(
+        target=OptimizerWorker,
+        args=(optimal_suggestion_queue, results_queue_, config, acquisition_function_optimal, None, True),
+    )
+    optimal_optimizer_process.daemon = True
+    optimal_optimizer_process.start()
+
     optimizer_process = multiprocessing.Process(
         target=OptimizerWorker,
-        args=(suggestion_queue, results_queue, config, probe),
+        args=(suggestion_queue, results_queue, config, acquisition_function, probe, True),
     )
     optimizer_process.daemon = True
     optimizer_process.start()
+
+
     while True:
-        x_probe, x_probe_as_array, results, optimizer_max = suggestion_queue.get()
-        score, running = run_game(x_probe, results, optimizer_max, stat_visuals, screen, font, config)
+        x_probe, x_probe_as_array, results = suggestion_queue.get()
+        optimal_x_probe, optimal_x_probe_as_array, _ = optimal_suggestion_queue.get()
+        score, running = run_game(x_probe, results, optimal_x_probe, stat_visuals, screen, font, config)
         results_queue.put((x_probe_as_array, score, running))
+        results_queue_.put((x_probe_as_array, score, running))
         if not running:
             break
 
     optimizer_process.join()
+    optimal_optimizer_process.join()
     pygame.quit()
 
 
