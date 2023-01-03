@@ -305,8 +305,8 @@ def plot_surfaces(area_data, center_data):
     return plot_image
 
 
-def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue, config,
-                    acquisition_function, probe=None, suggestor=False):
+def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue, results_queue_: multiprocessing.Queue,
+                    config, acquisition_function, probe=None, suggestor=False):
     pbounds = {
         'area_width' : (350, (config['right'] - config['left']) * (2560 + 2 * 420) / 2560),
         'area_height': (250, config['bottom'] - config['top']),
@@ -327,17 +327,18 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
         logger = JSONLogger(path="./data.json", reset=False)
         optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
     kernel = kernels.Matern() + kernels.WhiteKernel()
-    optimizer.set_gp_params(n_restarts_optimizer=3, normalize_y=True, kernel=kernel, alpha=5e-1)
+    optimizer.set_gp_params(n_restarts_optimizer=3, normalize_y=True, kernel=kernel, alpha=4e-1)
     # # acquisition_function = UtilityFunction(kind="ucb", kappa=0)
     # acquisition_function_optimal = UtilityFunction(kind="ucb", kappa=0)
     # # acquisition_function = UtilityFunction(kind='ucb')
     # acquisition_function = UtilityFunction(kind='ei', xi=1e-2)
     optimizer._prime_subscriptions()
     optimizer.dispatch(Events.OPTIMIZATION_START)
-    results_queue_ = []
-    init_points = True if probe is not None else False
+    # results_queue_ = []
+    # init_points = True if probe is not None else False
 
-    while True:
+    running = True
+    while running:
         if not suggestion_queue.full():
             if probe is None:
                 acquisition_function.update_params()
@@ -354,26 +355,27 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
                 results['target'] = y
             if suggestor and fail_bounds(suggestion, config)[0]:
                 results_queue.put((suggestion_as_array, 0, results))
+                results_queue_.put((suggestion_as_array, 0, results))
                 continue
             else:
                 plot_data = None
                 if suggestor:
                     plot_data = surface_plot_data(optimizer, pbounds, suggestion)
                 suggestion_queue.put((suggestion, suggestion_as_array, results, plot_data))
-        if not results_queue.empty():
+        while not results_queue.empty():
             params, score, running = results_queue.get()
             if not running:
                 break
-            if init_points and len(results_queue_) < 30:
-                results_queue_.append((params, score))
-                if len(results_queue_) == 30:
-                    for params, score in results_queue_:
-                        optimizer.register(params=params, target=score)
-                    init_points = False
-                    results_queue_ = []
-            else:
-                optimizer._space.register(params, score)
-                optimizer.dispatch(Events.OPTIMIZATION_STEP)
+            # if init_points and len(results_queue_) < 30:
+            #     results_queue_.append((params, score))
+            #     if len(results_queue_) == 30:
+            #         for params, score in results_queue_:
+            #             optimizer.register(params=params, target=score)
+            #         init_points = False
+            #         results_queue_ = []
+            # else:
+            optimizer._space.register(params, score)
+            optimizer.dispatch(Events.OPTIMIZATION_STEP)
         sleep(0.1)
     suggestion_queue.cancel_join_thread()
     results_queue.cancel_join_thread()
@@ -442,18 +444,18 @@ def main():
     results_queue_ = multiprocessing.Queue()
 
     acquisition_function_optimal = UtilityFunction(kind="ucb", kappa=0)
-    acquisition_function = UtilityFunction(kind='ei', xi=1e-2)
+    acquisition_function = UtilityFunction(kind='ei', xi=1e-8)
 
     optimal_optimizer_process = multiprocessing.Process(
         target=OptimizerWorker,
-        args=(optimal_suggestion_queue, results_queue_, config, acquisition_function_optimal, None, True),
+        args=(optimal_suggestion_queue, results_queue_, results_queue, config, acquisition_function_optimal, None, True),
     )
     optimal_optimizer_process.daemon = True
     optimal_optimizer_process.start()
 
     optimizer_process = multiprocessing.Process(
         target=OptimizerWorker,
-        args=(suggestion_queue, results_queue, config, acquisition_function, probe, True),
+        args=(suggestion_queue, results_queue, results_queue_, config, acquisition_function, probe, True),
     )
     optimizer_process.daemon = True
     optimizer_process.start()
