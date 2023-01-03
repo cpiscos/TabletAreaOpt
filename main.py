@@ -15,7 +15,7 @@ from bayes_opt.logger import JSONLogger
 from bayes_opt.util import load_logs, UtilityFunction
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
-KAPPA = 2.576  # the default is 2.576, 10-30 is explorative, set to 0 for exploitation, rerun after changes
+KAPPA = 2.576  # the default is 2.576, 10 is explorative, set to 0 for exploitation, rerun after changes
 CIRCLES_PER_RUN = 20
 LOADING = True
 
@@ -119,8 +119,7 @@ def run_game(params, results, optimal_params, screen, font, config, surface_plot
 
     prev_x, prev_y = None, None
     results_plot_image = plot_results(results, config)
-    if surface_plot is not None:
-        surface_plot_image = plot_surfaces(surface_plot[0], surface_plot[1])
+    surface_plot_image = plot_surfaces(surface_plot[0], surface_plot[1])
     xs, ys = [], []
     for i in range(CIRCLES_PER_RUN + 1):
         xs.append(random.randint(420 + radius, 2560 - 420 - radius))
@@ -144,8 +143,7 @@ def run_game(params, results, optimal_params, screen, font, config, surface_plot
             pygame.draw.circle(screen, (255, 0, 0), cursor_pos, cursor_radius)
 
             screen.blit(results_plot_image, (0, config['res_height'] // 2 - results_plot_image.get_height() // 2))
-            if surface_plot is not None:
-                screen.blit(surface_plot_image, (config['res_width']-results_plot_image.get_width(), config['res_height'] // 2 - results_plot_image.get_height() // 2))
+            screen.blit(surface_plot_image, (config['res_width']-results_plot_image.get_width(), config['res_height'] // 2 - results_plot_image.get_height() // 2))
             text = font.render(
                 f"Area: {tablet_area_width:.5f}mm x {tablet_area_height:.5f}mm, Center: {tablet_center_x:.5f}mm, {tablet_center_y:.5f}mm",
                 True,
@@ -379,7 +377,7 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
         sleep(0.1)
     suggestion_queue.cancel_join_thread()
     results_queue.cancel_join_thread()
-
+    results_queue_.cancel_join_thread()
 
 def main():
     config = None
@@ -444,11 +442,12 @@ def main():
     results_queue_ = multiprocessing.Queue()
 
     acquisition_function_optimal = UtilityFunction(kind="ucb", kappa=0)
-    acquisition_function = UtilityFunction(kind='ei', xi=1e-8)
+    # acquisition_function = UtilityFunction(kind='ei', xi=1e-8)
+    acquisition_function = UtilityFunction(kind='ucb', kappa=KAPPA)
 
     optimal_optimizer_process = multiprocessing.Process(
         target=OptimizerWorker,
-        args=(optimal_suggestion_queue, results_queue_, results_queue, config, acquisition_function_optimal, None, True),
+        args=(optimal_suggestion_queue, results_queue_, results_queue, config, acquisition_function_optimal, None, False),
     )
     optimal_optimizer_process.daemon = True
     optimal_optimizer_process.start()
