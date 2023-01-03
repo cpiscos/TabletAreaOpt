@@ -119,7 +119,8 @@ def run_game(params, results, optimal_params, screen, font, config, surface_plot
 
     prev_x, prev_y = None, None
     results_plot_image = plot_results(results, config)
-    surface_plot_image = plot_surfaces(surface_plot[0], surface_plot[1])
+    if surface_plot is not None:
+        surface_plot_image = plot_surfaces(surface_plot[0], surface_plot[1])
     xs, ys = [], []
     for i in range(CIRCLES_PER_RUN + 1):
         xs.append(random.randint(420 + radius, 2560 - 420 - radius))
@@ -143,7 +144,8 @@ def run_game(params, results, optimal_params, screen, font, config, surface_plot
             pygame.draw.circle(screen, (255, 0, 0), cursor_pos, cursor_radius)
 
             screen.blit(results_plot_image, (0, config['res_height'] // 2 - results_plot_image.get_height() // 2))
-            screen.blit(surface_plot_image, (config['res_width']-results_plot_image.get_width(), config['res_height'] // 2 - results_plot_image.get_height() // 2))
+            if surface_plot is not None:
+                screen.blit(surface_plot_image, (config['res_width']-results_plot_image.get_width(), config['res_height'] // 2 - results_plot_image.get_height() // 2))
             text = font.render(
                 f"Area: {tablet_area_width:.5f}mm x {tablet_area_height:.5f}mm, Center: {tablet_center_x:.5f}mm, {tablet_center_y:.5f}mm",
                 True,
@@ -235,16 +237,16 @@ def fail_bounds(params, config):
     return False, None
 
 
-def surface_plot_data(optimizer, pbounds):
+def surface_plot_data(optimizer, pbounds, suggestion):
     gp = optimizer._gp
     area_width_range = np.linspace(pbounds['area_width'][0], pbounds['area_width'][1], 100)
     area_height_range = np.linspace(pbounds['area_height'][0], pbounds['area_height'][1], 100)
     center_x_range = np.linspace(pbounds['center_x'][0], pbounds['center_x'][1], 100)
     center_y_range = np.linspace(pbounds['center_y'][0], pbounds['center_y'][1], 100)
-    # create area width x area height surface and use average sampled center x and center y
+    # create area width x area height surface and use suggestion as center x and center y
     area_width, area_height = np.meshgrid(area_width_range, area_height_range)
-    center_x = np.full(area_width.shape, np.mean([res['params']['center_x'] for res in optimizer.res]))
-    center_y = np.full(area_width.shape, np.mean([res['params']['center_y'] for res in optimizer.res]))
+    center_x = np.ones_like(area_width) * suggestion['center_x']
+    center_y = np.ones_like(area_width) * suggestion['center_y']
     X = np.dstack((area_width, area_height, center_x, center_y))
     X_2d = X.reshape(-1, 4)
     area_predictions, area_std = gp.predict(X_2d, return_std=True)
@@ -252,10 +254,10 @@ def surface_plot_data(optimizer, pbounds):
     area_std = area_std.reshape(area_width.shape)
     area_data = (area_width, area_height, area_predictions, area_std)
 
-    # create center x x center y surface and use average sampled area width and area height
+    # create area width x center x surface and use suggestion as area height and center y
     center_x, center_y = np.meshgrid(center_x_range, center_y_range)
-    area_width = np.full(center_x.shape, np.mean([res['params']['area_width'] for res in optimizer.res]))
-    area_height = np.full(center_x.shape, np.mean([res['params']['area_height'] for res in optimizer.res]))
+    area_width = np.ones_like(center_x) * suggestion['area_width']
+    area_height = np.ones_like(center_x) * suggestion['area_height']
     X = np.dstack((area_width, area_height, center_x, center_y))
     X_2d = X.reshape(-1, 4)
     center_predictions, center_std = gp.predict(X_2d, return_std=True)
@@ -355,8 +357,8 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
                 continue
             else:
                 plot_data = None
-                if suggestor and len(optimizer.res) > 0:
-                    plot_data = surface_plot_data(optimizer, pbounds)
+                if suggestor:
+                    plot_data = surface_plot_data(optimizer, pbounds, suggestion)
                 suggestion_queue.put((suggestion, suggestion_as_array, results, plot_data))
         if not results_queue.empty():
             params, score, running = results_queue.get()
