@@ -15,11 +15,13 @@ from bayes_opt.logger import JSONLogger
 from bayes_opt.util import load_logs, UtilityFunction
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
+KAPPA = 2.576  # the default is 2.576, 10-30 is explorative, set to 0 for exploitation, rerun after changes
 CIRCLES_PER_RUN = 20
 LOADING = True
 
-TABLET_WIDTH = 224
-TABLET_HEIGHT = 148
+
+# TABLET_WIDTH = 224
+# TABLET_HEIGHT = 148
 
 
 def convert_to_tablet_coordinates(area_width, area_height, center_x, center_y, config):
@@ -249,7 +251,7 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
     kernel = kernels.Matern() + kernels.WhiteKernel()
     optimizer.set_gp_params(n_restarts_optimizer=3, normalize_y=True, kernel=kernel)
     # acquisition_function = UtilityFunction(kind="ucb", kappa=0)
-    acquisition_function = UtilityFunction(kind="ucb", kappa=2.5)
+    acquisition_function = UtilityFunction(kind="ucb", kappa=KAPPA)
     # acquisition_function = UtilityFunction(kind='ucb')
     # acquisition_function = UtilityFunction(kind='ei', xi=1e-1)
     optimizer._prime_subscriptions()
