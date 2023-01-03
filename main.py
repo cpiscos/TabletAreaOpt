@@ -1,0 +1,375 @@
+import multiprocessing
+import multiprocessing.queues
+import os
+import random
+import json
+import sys
+from time import time, sleep
+
+import matplotlib.pyplot as plt
+import numpy as np
+import sklearn.gaussian_process.kernels as kernels
+from bayes_opt import BayesianOptimization
+from bayes_opt.event import Events
+from bayes_opt.logger import JSONLogger
+from bayes_opt.util import load_logs, UtilityFunction
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+CIRCLES_PER_RUN = 20
+LOADING = True
+
+TABLET_WIDTH = 224
+TABLET_HEIGHT = 148
+
+
+def convert_to_tablet_coordinates(area_width, area_height, center_x, center_y, config):
+    area_width = area_width * config['tablet_width'] / config['res_width']
+    area_height = area_height * config['tablet_height'] / config['res_height']
+    center_x = center_x * config['tablet_width'] / config['res_width']
+    center_y = center_y * config['tablet_height'] / config['res_height']
+    return area_width, area_height, center_x, center_y
+
+
+def convert_to_pixel_coordinates(area_width, area_height, center_x, center_y, config):
+    area_width = area_width * config['res_width'] / config['tablet_width']
+    area_height = area_height * config['res_height'] / config['tablet_height']
+    center_x = center_x * config['res_width'] / config['tablet_width']
+    center_y = center_y * config['res_height'] / config['tablet_height']
+    return area_width, area_height, center_x, center_y
+
+
+def remap_cursor_position(x, y, area_width, area_height, center_x, center_y, res_width, res_height):
+    mapped_x = (x - center_x) * res_width / area_width + res_width / 2
+    mapped_y = (y - center_y) * res_height / area_height + res_height / 2
+    return mapped_x, mapped_y
+
+
+def plot_results(results, config):
+    fig, ax = plt.subplots(3, 2, figsize=(8, 12))
+    fig.tight_layout(pad=3.0)
+    ax = ax.flatten()
+    area_widths, area_heights, center_xs, center_ys = convert_to_tablet_coordinates(np.array(results['area_width']),
+                                                                                    np.array(results['area_height']),
+                                                                                    np.array(results['center_x']),
+                                                                                    np.array(results['center_y']),
+                                                                                    config)
+    y = np.array(results['target'])
+    results = {'area_width': area_widths, 'area_height': area_heights, 'center_x': center_xs, 'center_y': center_ys}
+    i = 0
+    for param, x in results.items():
+        ax[i].scatter(x, y, c=y, cmap='viridis_r')
+        ax[i].set_title(f"Optimization results for {param}")
+        ax[i].set_xlabel(param)
+        ax[i].set_ylabel("Score")
+        i += 1
+
+    # 2D heatmap of the score as a function of the two parameters
+    ax[4].set_title("Score heatmap")
+    ax[4].set_xlabel("Area width")
+    ax[4].set_ylabel("Area height")
+    # blue to red cmap
+    ax[4].scatter(results['area_width'], results['area_height'], c=y, cmap='viridis_r')
+
+    # 2D heatmap of the score as a function of the two parameters
+    ax[5].set_title("Score heatmap")
+    ax[5].set_xlabel("Center X")
+    ax[5].set_ylabel("Center Y")
+    ax[5].scatter(results['center_x'], results['center_y'], c=y, cmap='viridis_r')
+
+    # Convert the matplotlib plot into a raw RGB image data string
+    canvas = FigureCanvasAgg(fig)
+    canvas.figure.set_dpi(50)
+    canvas.draw()
+    width, height = canvas.get_width_height()
+    raw_data = canvas.buffer_rgba()
+
+    # Close the matplotlib figure to free up memory
+
+    # Convert the raw RGB image data string into a Pygame surface
+    plot_image = pygame.image.frombuffer(raw_data, (width, height), "RGBA")
+    plt.close(fig)
+    return plot_image
+
+
+class StatVisuals:
+    def __init__(self, config):
+        self.plot_results_counter = 0
+        self.plot_results_ = None
+        self.config = config
+
+    def plot_results(self, results):
+        if self.plot_results_counter % 1 == 0:
+            self.plot_results_ = plot_results(results, self.config)
+        self.plot_results_counter += 1
+        return self.plot_results_
+
+
+def run_game(params, results, optimizer_max, stat_visuals, screen, font, config):
+    area_width = params['area_width']
+    area_height = params['area_height']
+    center_x = params['center_x']
+    center_y = params['center_y']
+    radius = 65
+    cursor_radius = 20
+    color = (0, 0, 255)  # blue
+    next_color = (0, 255, 0)  # green
+    colors = [color, next_color]
+    if not area_width / 2 + center_x - area_width * 420 / 2560 < config['right']:
+        return 0, True
+    if not area_height / 2 + center_y < config['bottom']:
+        return 0, True
+    if not center_x - area_width / 2 + area_width * 420 / 2560 > config['left']:
+        return 0, True
+    if not center_y - area_height / 2 > config['top']:
+        return 0, True
+    score = 0
+    (tablet_area_width, tablet_area_height, tablet_center_x, tablet_center_y) = convert_to_tablet_coordinates(
+        area_width,
+        area_height,
+        center_x,
+        center_y, config)
+
+    prev_x, prev_y = None, None
+    results_plot_image = stat_visuals.plot_results(results)
+    xs, ys = [], []
+    for i in range(CIRCLES_PER_RUN + 1):
+        xs.append(random.randint(420 + radius, 2560 - 420 - radius))
+        ys.append(random.randint(radius, 1440 - radius))
+    for run in range(CIRCLES_PER_RUN + 1):
+        x = xs[run]
+        y = ys[run]
+
+        running = True
+        start_time = time()
+        while running:
+            mouse_pos = pygame.mouse.get_pos()
+            cursor_pos = remap_cursor_position(mouse_pos[0], mouse_pos[1], area_width, area_height, center_x, center_y,
+                                               config['res_width'], config['res_height'])
+
+            screen.fill((0, 0, 0))
+            if run < CIRCLES_PER_RUN:
+                pygame.draw.circle(screen, colors[(run + 1) % len(colors)], (xs[run + 1], ys[run + 1]), radius)
+            pygame.draw.circle(screen, colors[run % len(colors)], (x, y), radius)
+            pygame.draw.circle(screen, (0, 0, 0), (x, y), radius // 3)
+            pygame.draw.circle(screen, (255, 0, 0), cursor_pos, cursor_radius)
+
+            screen.blit(results_plot_image, (0, config['res_height'] // 2 - results_plot_image.get_height() // 2))
+            text = font.render(
+                f"Area: {tablet_area_width:.5f}mm x {tablet_area_height:.5f}mm, Center: {tablet_center_x:.5f}mm, {tablet_center_y:.5f}mm",
+                True,
+                (255, 255, 255))
+            screen.blit(text, (10, 10))
+            text1 = font.render(f"{optimizer_max}", True, (255, 255, 255))
+            screen.blit(text1, (10, 30))
+            text0 = font.render(f"Press Z or X on the circle with a black center as fast as you can (Q to quit)", True,
+                                (255, 255, 255))
+            screen.blit(text0, (10, 70))
+            if run == 0:
+                text5 = font.render(f"New run! (Hit the first circle to start or press q to quit)", True,
+                                    (255, 255, 255))
+                screen.blit(text5, (10, 90))
+
+            text2 = font.render(f"Score: {score / run if run > 0 else 0}", True, (255, 255, 255))
+            screen.blit(text2, (config['res_width'] - 200, 90))
+            text3 = font.render(f"Mouse: {mouse_pos[0]}, {mouse_pos[1]}", True, (255, 255, 255))
+            screen.blit(text3, (config['res_width'] - 200, 30))
+            text4 = font.render(f"Cursor: {int(cursor_pos[0])}, {int(cursor_pos[1])}", True, (255, 255, 255))
+            screen.blit(text4, (config['res_width'] - 200, 50))
+            pygame.display.update()
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return None, False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_q:
+                        return None, False
+                    if event.key == pygame.K_z or event.key == pygame.K_x:
+                        if run > 0 and (x - cursor_pos[0]) ** 2 + (y - cursor_pos[1]) ** 2 <= radius ** 2:
+                            distance = np.sqrt((x - prev_x) ** 2 + (y - prev_y) ** 2)
+                            score += distance / (time() - start_time)
+                        running = False
+                        prev_x, prev_y = cursor_pos
+    return score / CIRCLES_PER_RUN, True
+
+
+def run_configurator(screen, font, config):
+    for direction in ['top', 'right', 'bottom', 'left']:
+
+        running = True
+        while running:
+            mouse_pos = pygame.mouse.get_pos()
+            screen.fill((0, 0, 0))
+            text = font.render(f"Move your pen tip to the farthest {direction} position and press Z", True,
+                               (255, 255, 255))
+            screen.blit(text, (
+                config['res_width'] // 2 - text.get_width() // 2, config['res_height'] // 2 - text.get_height() // 2))
+            text1 = font.render(f"Position: {mouse_pos[0]}, {mouse_pos[1]}", True, (255, 255, 255))
+            screen.blit(text1, (10, 10))
+            pygame.display.update()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_q:
+                        pygame.quit()
+                        sys.exit()
+                    if event.key == pygame.K_z:
+                        running = False
+                        if direction == 'top':
+                            config['top'] = mouse_pos[1]
+                        elif direction == 'right':
+                            config['right'] = mouse_pos[0]
+                        elif direction == 'bottom':
+                            config['bottom'] = mouse_pos[1]
+                        elif direction == 'left':
+                            config['left'] = mouse_pos[0]
+    return config
+
+
+def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue, config, probe=None):
+    pbounds = {
+        'area_width' : (150, config['right'] - config['left']),
+        'area_height': (150, config['bottom'] - config['top']),
+        'center_x'   : (config['left'], config['right']),
+        'center_y'   : (config['top'], config['bottom']),
+    }
+    optimizer = BayesianOptimization(
+        f=run_game,
+        pbounds=pbounds,
+        allow_duplicate_points=True,
+    )
+
+    if 'data.json' in os.listdir() and LOADING:
+        print("Loading previous logs...")
+        load_logs(optimizer, logs=["./data.json"])
+
+    logger = JSONLogger(path="./data.json", reset=False)
+    optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
+    kernel = kernels.Matern() + kernels.WhiteKernel()
+    optimizer.set_gp_params(n_restarts_optimizer=3, normalize_y=True, kernel=kernel)
+    # acquisition_function = UtilityFunction(kind="ucb", kappa=0)
+    acquisition_function = UtilityFunction(kind="ucb", kappa=2.5)
+    # acquisition_function = UtilityFunction(kind='ucb')
+    # acquisition_function = UtilityFunction(kind='ei', xi=1e-1)
+    optimizer._prime_subscriptions()
+    optimizer.dispatch(Events.OPTIMIZATION_START)
+    results_queue_ = []
+    init_points = True if probe is not None else False
+
+    while True:
+        if suggestion_queue.empty():
+            if probe is None:
+                acquisition_function.update_params()
+                suggestion = optimizer.suggest(acquisition_function)
+            else:
+                suggestion = probe
+                probe = None
+            suggestion_as_array = optimizer._space._as_array(suggestion)
+            results = {}
+            for i, param in enumerate(optimizer.space.keys):
+                x = [res['params'][param] for res in optimizer.res]
+                y = [res['target'] for res in optimizer.res]
+                results[param] = x
+                results['target'] = y
+            suggestion_queue.put((suggestion, suggestion_as_array, results, optimizer.max))
+        if not results_queue.empty():
+            params, score, running = results_queue.get()
+            if not running:
+                break
+            if init_points and len(results_queue_) < 30:
+                results_queue_.append((params, score))
+                if len(results_queue_) == 30:
+                    for params, score in results_queue_:
+                        optimizer.register(params=params, target=score)
+                    init_points = False
+                    results_queue_ = []
+            else:
+                optimizer._space.register(params, score)
+                optimizer.dispatch(Events.OPTIMIZATION_STEP)
+        sleep(0.1)
+    suggestion_queue.cancel_join_thread()
+    results_queue.cancel_join_thread()
+
+
+def main():
+    config = None
+    if 'config.json' in os.listdir():
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+
+    probe = None
+    if config is None:
+        print("\n\n\n\n\n\nOpen OpenTabletDriver")
+        print("Collecting normal area for reference")
+        width_probe = float(input("Enter the width of your current tablet area in mm: "))
+        height_probe = float(input("Height: "))
+        center_x_probe = float(input("X: "))
+        center_y_probe = float(input("Y: "))
+        print("Disable lock aspect ratio and resize the tablet area to full area in the right click menu of OTD.")
+        tablet_width = float(input("Enter the width of the full area in mm: "))
+        tablet_height = float(input("Height: "))
+        config = {
+            'tablet_width' : tablet_width,
+            'tablet_height': tablet_height,
+            'res_width'    : 2560,
+            'res_height'   : 1440,
+        }
+        area_width, area_height, center_x, center_y = convert_to_pixel_coordinates(width_probe, height_probe,
+                                                                                   center_x_probe, center_y_probe,
+                                                                                   config)
+        probe = {
+            'area_width' : area_width,
+            'area_height': area_height,
+            'center_x'   : center_x,
+            'center_y'   : center_y,
+        }
+    # if probe is None:
+    #     area_width, area_height, center_x, center_y = convert_to_pixel_coordinates(78, 52,
+    #                                                                                158, 81,
+    #                                                                                config)
+    #     probe = {
+    #         'area_width' : area_width,
+    #         'area_height': area_height,
+    #         'center_x'   : center_x,
+    #         'center_y'   : center_y,
+    #     }
+
+    input("Make sure your tablet area is set to the full area and press enter to start the game.")
+    print(probe)
+
+    pygame.init()
+    window_size = (config['res_width'], config['res_height'])
+    screen = pygame.display.set_mode(window_size)
+    font = pygame.font.Font(None, 24)
+    pygame.mouse.set_visible(False)
+
+    if 'top' not in config.keys():
+        config = run_configurator(screen, font, config)
+        with open('config.json', 'w') as f:
+            json.dump(config, f)
+
+    stat_visuals = StatVisuals(config)
+    suggestion_queue = multiprocessing.Queue()
+    results_queue = multiprocessing.Queue()
+    optimizer_process = multiprocessing.Process(
+        target=OptimizerWorker,
+        args=(suggestion_queue, results_queue, config, probe),
+    )
+    optimizer_process.daemon = True
+    optimizer_process.start()
+    while True:
+        x_probe, x_probe_as_array, results, optimizer_max = suggestion_queue.get()
+        score, running = run_game(x_probe, results, optimizer_max, stat_visuals, screen, font, config)
+        results_queue.put((x_probe_as_array, score, running))
+        if not running:
+            break
+
+    optimizer_process.join()
+    pygame.quit()
+
+
+if __name__ == '__main__':
+    import pygame
+
+    main()
