@@ -92,20 +92,7 @@ def plot_results(results, config):
     return plot_image
 
 
-class StatVisuals:
-    def __init__(self, config):
-        self.plot_results_counter = 0
-        self.plot_results_ = None
-        self.config = config
-
-    def plot_results(self, results):
-        if self.plot_results_counter % 1 == 0:
-            self.plot_results_ = plot_results(results, self.config)
-        self.plot_results_counter += 1
-        return self.plot_results_
-
-
-def run_game(params, results, optimal_params, stat_visuals, screen, font, config):
+def run_game(params, results, optimal_params, screen, font, config, surface_plot):
     area_width = params['area_width']
     area_height = params['area_height']
     center_x = params['center_x']
@@ -121,7 +108,7 @@ def run_game(params, results, optimal_params, stat_visuals, screen, font, config
     color = (0, 0, 255)  # blue
     next_color = (0, 255, 0)  # green
     colors = [color, next_color]
-    if check_bounds(params, config)[0]:
+    if fail_bounds(params, config)[0]:
         return 0, True
     score = 0
     (tablet_area_width, tablet_area_height, tablet_center_x, tablet_center_y) = convert_to_tablet_coordinates(
@@ -131,7 +118,8 @@ def run_game(params, results, optimal_params, stat_visuals, screen, font, config
         center_y, config)
 
     prev_x, prev_y = None, None
-    results_plot_image = stat_visuals.plot_results(results)
+    results_plot_image = plot_results(results, config)
+    surface_plot_image = plot_surfaces(surface_plot[0], surface_plot[1])
     xs, ys = [], []
     for i in range(CIRCLES_PER_RUN + 1):
         xs.append(random.randint(420 + radius, 2560 - 420 - radius))
@@ -155,6 +143,7 @@ def run_game(params, results, optimal_params, stat_visuals, screen, font, config
             pygame.draw.circle(screen, (255, 0, 0), cursor_pos, cursor_radius)
 
             screen.blit(results_plot_image, (0, config['res_height'] // 2 - results_plot_image.get_height() // 2))
+            screen.blit(surface_plot_image, (config['res_width']-results_plot_image.get_width(), config['res_height'] // 2 - results_plot_image.get_height() // 2))
             text = font.render(
                 f"Area: {tablet_area_width:.5f}mm x {tablet_area_height:.5f}mm, Center: {tablet_center_x:.5f}mm, {tablet_center_y:.5f}mm",
                 True,
@@ -230,7 +219,7 @@ def run_configurator(screen, font, config):
     return config
 
 
-def check_bounds(params, config):
+def fail_bounds(params, config):
     area_width = params['area_width']
     area_height = params['area_height']
     center_x = params['center_x']
@@ -246,8 +235,76 @@ def check_bounds(params, config):
     return False, None
 
 
+def surface_plot_data(optimizer, pbounds):
+    gp = optimizer._gp
+    area_width_range = np.linspace(pbounds['area_width'][0], pbounds['area_width'][1], 100)
+    area_height_range = np.linspace(pbounds['area_height'][0], pbounds['area_height'][1], 100)
+    center_x_range = np.linspace(pbounds['center_x'][0], pbounds['center_x'][1], 100)
+    center_y_range = np.linspace(pbounds['center_y'][0], pbounds['center_y'][1], 100)
+    # create area width x area height surface and use average sampled center x and center y
+    area_width, area_height = np.meshgrid(area_width_range, area_height_range)
+    center_x = np.full(area_width.shape, np.mean([res['params']['center_x'] for res in optimizer.res]))
+    center_y = np.full(area_width.shape, np.mean([res['params']['center_y'] for res in optimizer.res]))
+    X = np.dstack((area_width, area_height, center_x, center_y))
+    X_2d = X.reshape(-1, 4)
+    area_predictions, area_std = gp.predict(X_2d, return_std=True)
+    area_predictions = area_predictions.reshape(area_width.shape)
+    area_std = area_std.reshape(area_width.shape)
+    area_data = (area_width, area_height, area_predictions, area_std)
+
+    # create center x x center y surface and use average sampled area width and area height
+    center_x, center_y = np.meshgrid(center_x_range, center_y_range)
+    area_width = np.full(center_x.shape, np.mean([res['params']['area_width'] for res in optimizer.res]))
+    area_height = np.full(center_x.shape, np.mean([res['params']['area_height'] for res in optimizer.res]))
+    X = np.dstack((area_width, area_height, center_x, center_y))
+    X_2d = X.reshape(-1, 4)
+    center_predictions, center_std = gp.predict(X_2d, return_std=True)
+    center_predictions = center_predictions.reshape(center_x.shape)
+    center_std = center_std.reshape(center_x.shape)
+    center_data = (center_x, center_y, center_predictions, center_std)
+
+    return area_data, center_data
+
+
+def plot_surfaces(area_data, center_data):
+    fig = plt.figure(figsize=(8, 12))
+    fig.tight_layout(pad=0.0)
+    area_width, area_height, area_predictions, area_std = area_data
+    center_x, center_y, center_predictions, center_std = center_data
+    ax1 = fig.add_subplot(211, projection='3d')
+    ax1.plot_surface(area_width, area_height, area_predictions, cmap='viridis', alpha=1)
+    # ax1.plot_surface(area_width, area_height, area_predictions + area_std, cmap='viridis', alpha=0.2)
+    # ax1.plot_surface(area_width, area_height, area_predictions - area_std, cmap='viridis', alpha=0.2)
+    ax1.set_xlabel('Area width')
+    ax1.set_ylabel('Area height')
+    ax1.set_zlabel('Score')
+    ax1.view_init(elev=60)
+    ax2 = fig.add_subplot(212, projection='3d')
+    ax2.plot_surface(center_x, center_y, center_predictions, cmap='viridis', alpha=1)
+    # ax2.plot_surface(center_x, center_y, center_predictions + center_std, cmap='viridis', alpha=0.2)
+    # ax2.plot_surface(center_x, center_y, center_predictions - center_std, cmap='viridis', alpha=0.2)
+    ax2.set_xlabel('Center x')
+    ax2.set_ylabel('Center y')
+    ax2.set_zlabel('Score')
+    ax2.view_init(elev=60)
+    plt.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
+
+    canvas = FigureCanvasAgg(fig)
+    canvas.figure.set_dpi(50)
+    canvas.draw()
+    width, height = canvas.get_width_height()
+    raw_data = canvas.buffer_rgba()
+
+    # Close the matplotlib figure to free up memory
+
+    # Convert the raw RGB image data string into a Pygame surface
+    plot_image = pygame.image.frombuffer(raw_data, (width, height), "RGBA")
+    plt.close(fig)
+    return plot_image
+
+
 def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue, config,
-                    acquisition_function, probe=None, log=False):
+                    acquisition_function, probe=None, suggestor=False):
     pbounds = {
         'area_width' : (350, (config['right'] - config['left']) * (2560 + 2 * 420) / 2560),
         'area_height': (250, config['bottom'] - config['top']),
@@ -264,7 +321,7 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
         print("Loading previous logs...")
         load_logs(optimizer, logs=["./data.json"])
 
-    if log:
+    if suggestor:
         logger = JSONLogger(path="./data.json", reset=False)
         optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
     kernel = kernels.Matern() + kernels.WhiteKernel()
@@ -293,11 +350,14 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
                 y = [res['target'] for res in optimizer.res]
                 results[param] = x
                 results['target'] = y
-            if log and check_bounds(suggestion, config)[0]:
+            if suggestor and fail_bounds(suggestion, config)[0]:
                 results_queue.put((suggestion_as_array, 0, results))
                 continue
             else:
-                suggestion_queue.put((suggestion, suggestion_as_array, results))
+                plot_data = None
+                if suggestor and len(optimizer.res) > 0:
+                    plot_data = surface_plot_data(optimizer, pbounds)
+                suggestion_queue.put((suggestion, suggestion_as_array, results, plot_data))
         if not results_queue.empty():
             params, score, running = results_queue.get()
             if not running:
@@ -374,7 +434,6 @@ def main():
         with open('config.json', 'w') as f:
             json.dump(config, f)
 
-    stat_visuals = StatVisuals(config)
     suggestion_queue = multiprocessing.Queue(maxsize=1)
     optimal_suggestion_queue = multiprocessing.Queue(maxsize=1)
     results_queue = multiprocessing.Queue()
@@ -398,9 +457,9 @@ def main():
     optimizer_process.start()
 
     while True:
-        x_probe, x_probe_as_array, results = suggestion_queue.get()
-        optimal_x_probe, optimal_x_probe_as_array, _ = optimal_suggestion_queue.get()
-        score, running = run_game(x_probe, results, optimal_x_probe, stat_visuals, screen, font, config)
+        x_probe, x_probe_as_array, results, surface_plot = suggestion_queue.get()
+        optimal_x_probe, optimal_x_probe_as_array, _, _ = optimal_suggestion_queue.get()
+        score, running = run_game(x_probe, results, optimal_x_probe, screen, font, config, surface_plot)
         results_queue.put((x_probe_as_array, score, running))
         results_queue_.put((x_probe_as_array, score, running))
         if not running:
