@@ -268,7 +268,7 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
         logger = JSONLogger(path="./data.json", reset=False)
         optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
     kernel = kernels.Matern() + kernels.WhiteKernel()
-    optimizer.set_gp_params(n_restarts_optimizer=3, normalize_y=True, kernel=kernel, alpha=1e-1)
+    optimizer.set_gp_params(n_restarts_optimizer=3, normalize_y=True, kernel=kernel, alpha=5e-1)
     # # acquisition_function = UtilityFunction(kind="ucb", kappa=0)
     # acquisition_function_optimal = UtilityFunction(kind="ucb", kappa=0)
     # # acquisition_function = UtilityFunction(kind='ucb')
