@@ -23,7 +23,6 @@ LOADING = True
 # TABLET_WIDTH = 224
 # TABLET_HEIGHT = 148
 
-
 def convert_to_tablet_coordinates(area_width, area_height, center_x, center_y, config):
     area_width = area_width * config['tablet_width'] / config['res_width']
     area_height = area_height * config['tablet_height'] / config['res_height']
