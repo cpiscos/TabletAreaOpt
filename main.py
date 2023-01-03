@@ -119,7 +119,8 @@ def run_game(params, results, optimal_params, screen, font, config, surface_plot
 
     prev_x, prev_y = None, None
     results_plot_image = plot_results(results, config)
-    surface_plot_image = plot_surfaces(surface_plot[0], surface_plot[1])
+    if surface_plot is not None:
+        surface_plot_image = plot_surfaces(surface_plot[0], surface_plot[1])
     xs, ys = [], []
     for i in range(CIRCLES_PER_RUN + 1):
         xs.append(random.randint(420 + radius, 2560 - 420 - radius))
@@ -143,7 +144,8 @@ def run_game(params, results, optimal_params, screen, font, config, surface_plot
             pygame.draw.circle(screen, (255, 0, 0), cursor_pos, cursor_radius)
 
             screen.blit(results_plot_image, (0, config['res_height'] // 2 - results_plot_image.get_height() // 2))
-            screen.blit(surface_plot_image, (config['res_width']-results_plot_image.get_width(), config['res_height'] // 2 - results_plot_image.get_height() // 2))
+            if surface_plot is not None:
+                screen.blit(surface_plot_image, (config['res_width']-results_plot_image.get_width(), config['res_height'] // 2 - results_plot_image.get_height() // 2))
             text = font.render(
                 f"Area: {tablet_area_width:.5f}mm x {tablet_area_height:.5f}mm, Center: {tablet_center_x:.5f}mm, {tablet_center_y:.5f}mm",
                 True,
