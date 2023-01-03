@@ -238,7 +238,7 @@ def run_configurator(screen, font, config):
 
 def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue, config, acquisition_function, probe=None, log=False):
     pbounds = {
-        'area_width' : (350, config['right'] - config['left']),
+        'area_width' : (350, (config['right'] - config['left']) * (2560 + 2 * 420) / 2560),
         'area_height': (250, config['bottom'] - config['top']),
         'center_x'   : (config['left'], config['right']),
         'center_y'   : (config['top'], config['bottom']),
