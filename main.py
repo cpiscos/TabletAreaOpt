@@ -15,7 +15,7 @@ from bayes_opt.logger import JSONLogger
 from bayes_opt.util import load_logs, UtilityFunction
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
-KAPPA = 2.576  # the default is 2.576, 10 is explorative, set to 0 for exploitation, rerun after changes
+KAPPA = 4  # the default is 2.576, 10 is explorative, set to 0 for exploitation, rerun after changes
 CIRCLES_PER_RUN = 20
 LOADING = True
 
@@ -103,12 +103,12 @@ def run_game(params, results, optimal_params, screen, font, config, surface_plot
     optimal_center_y = optimal_params['center_y']
     optimal_area_width, optimal_area_height, optimal_center_x, optimal_center_y = convert_to_tablet_coordinates(
         optimal_area_width, optimal_area_height, optimal_center_x, optimal_center_y, config)
-    radius = 65
-    cursor_radius = 20
+    radius = 65 * config['res_width'] / 2560
+    cursor_radius = 20 * config['res_width'] / 2560
     color = (0, 0, 255)  # blue
     next_color = (0, 255, 0)  # green
     colors = [color, next_color]
-    if fail_bounds(params, config)[0]:
+    if fail_bounds(params, config):
         return 0, True
     score = 0
     (tablet_area_width, tablet_area_height, tablet_center_x, tablet_center_y) = convert_to_tablet_coordinates(
@@ -116,14 +116,26 @@ def run_game(params, results, optimal_params, screen, font, config, surface_plot
         area_height,
         center_x,
         center_y, config)
+    text0 = font.render(f"Press Z or X on the circle with a black center as fast as you can (Q to quit)", True,
+                        (255, 255, 255))
+    text = font.render(
+        f"Area: {tablet_area_width:.5f}mm x {tablet_area_height:.5f}mm, Center: {tablet_center_x:.5f}mm, {tablet_center_y:.5f}mm",
+        True,
+        (255, 255, 255))
+    text1 = font.render(
+        f"Optimal area: {optimal_area_width:.5f}mm x {optimal_area_height:.5f}mm, Center: {optimal_center_x:.5f}mm, {optimal_center_y:.5f}mm",
+        True, (255, 255, 255))
+    text5 = font.render(f"New run! (Hit the first circle to start or press q to quit)", True,
+                        (255, 255, 255))
 
     prev_x, prev_y = None, None
     results_plot_image = plot_results(results, config)
     surface_plot_image = plot_surfaces(surface_plot[0], surface_plot[1])
     xs, ys = [], []
     for i in range(CIRCLES_PER_RUN + 1):
-        xs.append(random.randint(420 + radius, 2560 - 420 - radius))
-        ys.append(random.randint(radius, 1440 - radius))
+        xs.append(random.randint(420 * config['res_width'] / 2560 + radius,
+                                 (2560 - 420) * config['res_width'] / 2560 - radius))
+        ys.append(random.randint(radius, config['res_height'] - radius))
     for run in range(CIRCLES_PER_RUN + 1):
         x = xs[run]
         y = ys[run]
@@ -143,22 +155,12 @@ def run_game(params, results, optimal_params, screen, font, config, surface_plot
             pygame.draw.circle(screen, (255, 0, 0), cursor_pos, cursor_radius)
 
             screen.blit(results_plot_image, (0, config['res_height'] // 2 - results_plot_image.get_height() // 2))
-            screen.blit(surface_plot_image, (config['res_width']-results_plot_image.get_width(), config['res_height'] // 2 - results_plot_image.get_height() // 2))
-            text = font.render(
-                f"Area: {tablet_area_width:.5f}mm x {tablet_area_height:.5f}mm, Center: {tablet_center_x:.5f}mm, {tablet_center_y:.5f}mm",
-                True,
-                (255, 255, 255))
+            screen.blit(surface_plot_image, (config['res_width'] - results_plot_image.get_width(),
+                                             config['res_height'] // 2 - results_plot_image.get_height() // 2))
             screen.blit(text, (10, 10))
-            text1 = font.render(
-                f"Optimal area: {optimal_area_width:.5f}mm x {optimal_area_height:.5f}mm, Center: {optimal_center_x:.5f}mm, {optimal_center_y:.5f}mm",
-                True, (255, 255, 255))
             screen.blit(text1, (10, 30))
-            text0 = font.render(f"Press Z or X on the circle with a black center as fast as you can (Q to quit)", True,
-                                (255, 255, 255))
             screen.blit(text0, (10, 70))
             if run == 0:
-                text5 = font.render(f"New run! (Hit the first circle to start or press q to quit)", True,
-                                    (255, 255, 255))
                 screen.blit(text5, (10, 90))
 
             text2 = font.render(f"Score: {score / run if run > 0 else 0}", True, (255, 255, 255))
@@ -177,26 +179,36 @@ def run_game(params, results, optimal_params, screen, font, config, surface_plot
                         return None, False
                     if event.key == pygame.K_z or event.key == pygame.K_x:
                         if run > 0 and (x - cursor_pos[0]) ** 2 + (y - cursor_pos[1]) ** 2 <= radius ** 2:
-                            distance = np.sqrt((x - prev_x) ** 2 + (y - prev_y) ** 2)
+                            distance = np.sqrt((cursor_pos[0] - prev_x) ** 2 + (cursor_pos[1] - prev_y) ** 2)
                             score += distance / (time() - start_time)
                         running = False
                         prev_x, prev_y = cursor_pos
     return score / CIRCLES_PER_RUN, True
 
 
-def run_configurator(screen, font, config):
-    for direction in ['top', 'right', 'bottom', 'left']:
-
+def run_configurator(screen, font, config, probe):
+    radius = 20 * config['res_width'] / 2560
+    color = (255, 0, 0)
+    points = []
+    for direction in ['left', 'bottom-left', 'bottom', 'bottom-right', 'right', 'top-right', 'top', 'top-left']:
         running = True
+        min_right = probe['area_width'] / 2 + probe['center_x'] - probe['area_width'] * 420 / 2560
+        min_left = probe['center_x'] - probe['area_width'] / 2 + probe['area_width'] * 420 / 2560
+        min_top = probe['center_y'] - probe['area_height'] / 2
+        min_bottom = probe['area_height'] / 2 + probe['center_y']
         while running:
             mouse_pos = pygame.mouse.get_pos()
             screen.fill((0, 0, 0))
-            text = font.render(f"Move your pen tip to the farthest {direction} position and press Z", True,
+            text = font.render(f"Move your pen tip to the farthest comfortable {direction} position and press Z or X",
+                               True,
                                (255, 255, 255))
             screen.blit(text, (
                 config['res_width'] // 2 - text.get_width() // 2, config['res_height'] // 2 - text.get_height() // 2))
             text1 = font.render(f"Position: {mouse_pos[0]}, {mouse_pos[1]}", True, (255, 255, 255))
             screen.blit(text1, (10, 10))
+            pygame.draw.circle(screen, color, mouse_pos, radius)
+            for point in points:
+                pygame.draw.circle(screen, color, point, radius)
             pygame.display.update()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -206,16 +218,25 @@ def run_configurator(screen, font, config):
                     if event.key == pygame.K_q:
                         pygame.quit()
                         sys.exit()
-                    if event.key == pygame.K_z:
+                    if event.key == pygame.K_z or event.key == pygame.K_x:
+                        points.append(mouse_pos)
                         running = False
-                        if direction == 'top':
-                            config['top'] = mouse_pos[1]
-                        elif direction == 'right':
-                            config['right'] = mouse_pos[0]
+                        if direction == 'left':
+                            config[direction] = (min(min_left, mouse_pos[0]), mouse_pos[1])
+                        elif direction == 'bottom-left':
+                            config[direction] = (min(min_left, mouse_pos[0]), max(min_bottom, mouse_pos[1]))
                         elif direction == 'bottom':
-                            config['bottom'] = mouse_pos[1]
-                        elif direction == 'left':
-                            config['left'] = mouse_pos[0]
+                            config[direction] = (mouse_pos[0], max(min_bottom, mouse_pos[1]))
+                        elif direction == 'bottom-right':
+                            config[direction] = (max(min_right, mouse_pos[0]), max(min_bottom, mouse_pos[1]))
+                        elif direction == 'right':
+                            config[direction] = (max(min_right, mouse_pos[0]), mouse_pos[1])
+                        elif direction == 'top-right':
+                            config[direction] = (max(min_right, mouse_pos[0]), min(min_top, mouse_pos[1]))
+                        elif direction == 'top':
+                            config[direction] = (mouse_pos[0], min(min_top, mouse_pos[1]))
+                        elif direction == 'top-left':
+                            config[direction] = (min(min_left, mouse_pos[0]), min(min_top, mouse_pos[1]))
     return config
 
 
@@ -224,45 +245,69 @@ def fail_bounds(params, config):
     area_height = params['area_height']
     center_x = params['center_x']
     center_y = params['center_y']
-    if not area_width / 2 + center_x - area_width * 420 / 2560 < config['right']:
-        return True, 'right'
-    if not area_height / 2 + center_y < config['bottom']:
-        return True, 'bottom'
-    if not center_x - area_width / 2 + area_width * 420 / 2560 > config['left']:
-        return True, 'left'
-    if not center_y - area_height / 2 > config['top']:
-        return True, 'top'
-    return False, None
+    max_right = area_width / 2 + center_x - area_width * 420 / 2560
+    max_left = center_x - area_width / 2 + area_width * 420 / 2560
+    max_top = center_y - area_height / 2
+    max_bottom = area_height / 2 + center_y
+    if not max_right < config['right'][0]:
+        return True
+    if not max_bottom < config['bottom'][1]:
+        return True
+    if not max_left > config['left'][0]:
+        return True
+    if not max_top > config['top'][1]:
+        return True
+    if max_right > config['top-right'][0] and max_top < config['top-right'][1]:
+        return True
+    if max_right > config['bottom-right'][0] and max_bottom > config['bottom-right'][1]:
+        return True
+    if max_left < config['top-left'][0] and max_top < config['top-left'][1]:
+        return True
+    if max_left < config['bottom-left'][0] and max_bottom > config['bottom-left'][1]:
+        return True
+    return False
 
 
 def surface_plot_data(optimizer, pbounds, suggestion):
     gp = optimizer._gp
-    area_width_range = np.linspace(pbounds['area_width'][0], pbounds['area_width'][1], 100)
-    area_height_range = np.linspace(pbounds['area_height'][0], pbounds['area_height'][1], 100)
-    center_x_range = np.linspace(pbounds['center_x'][0], pbounds['center_x'][1], 100)
-    center_y_range = np.linspace(pbounds['center_y'][0], pbounds['center_y'][1], 100)
-    # create area width x area height surface and use suggestion as center x and center y
-    area_width, area_height = np.meshgrid(area_width_range, area_height_range)
-    center_x = np.ones_like(area_width) * suggestion['center_x']
-    center_y = np.ones_like(area_width) * suggestion['center_y']
-    X = np.dstack((area_width, area_height, center_x, center_y))
-    X_2d = X.reshape(-1, 4)
-    area_predictions, area_std = gp.predict(X_2d, return_std=True)
-    area_predictions = area_predictions.reshape(area_width.shape)
-    area_std = area_std.reshape(area_width.shape)
-    area_data = (area_width, area_height, area_predictions, area_std)
 
-    # create area width x center x surface and use suggestion as area height and center y
-    center_x, center_y = np.meshgrid(center_x_range, center_y_range)
-    area_width = np.ones_like(center_x) * suggestion['area_width']
-    area_height = np.ones_like(center_x) * suggestion['area_height']
-    X = np.dstack((area_width, area_height, center_x, center_y))
-    X_2d = X.reshape(-1, 4)
-    center_predictions, center_std = gp.predict(X_2d, return_std=True)
-    center_predictions = center_predictions.reshape(center_x.shape)
-    center_std = center_std.reshape(center_x.shape)
-    center_data = (center_x, center_y, center_predictions, center_std)
+    # create area width x area height surface and average predictions over center x and center y
+    area_width_range = np.linspace(pbounds['area_width'][0], pbounds['area_width'][1], 64)
+    area_height_range = np.linspace(pbounds['area_height'][0], pbounds['area_height'][1], 64)
+    center_x_range = np.linspace(pbounds['center_x'][0], pbounds['center_x'][1], 8)
+    center_y_range = np.linspace(pbounds['center_y'][0], pbounds['center_y'][1], 8)
+    area_width, area_height, center_x, center_y = np.meshgrid(area_width_range, area_height_range, center_x_range, center_y_range)
+    X = {'area_width': area_width, 'area_height': area_height, 'center_x': center_x, 'center_y': center_y}
+    X = [X[key] for key in optimizer._space.keys]
+    # convert to 2D array
+    X = np.array(X).reshape(len(optimizer._space.keys), -1).T
+    mu, sigma = gp.predict(X, return_std=True)
+    mu = mu.reshape(area_width.shape)
+    sigma = sigma.reshape(area_width.shape)
+    mu = np.mean(mu, axis=(optimizer._space.keys.index('center_x'), optimizer._space.keys.index('center_y')))
+    sigma = np.mean(sigma, axis=(optimizer._space.keys.index('center_x'), optimizer._space.keys.index('center_y')))
+    area_width = np.mean(area_width, axis=(optimizer._space.keys.index('center_x'), optimizer._space.keys.index('center_y')))
+    area_height = np.mean(area_height, axis=(optimizer._space.keys.index('center_x'), optimizer._space.keys.index('center_y')))
+    area_data = (area_width, area_height, mu, sigma)
 
+    # create area width x center x surface and average predictions over area width and area height
+    area_width_range = np.linspace(pbounds['area_width'][0], pbounds['area_width'][1], 8)
+    area_height_range = np.linspace(pbounds['area_height'][0], pbounds['area_height'][1], 8)
+    center_x_range = np.linspace(pbounds['center_x'][0], pbounds['center_x'][1], 64)
+    center_y_range = np.linspace(pbounds['center_y'][0], pbounds['center_y'][1], 64)
+    area_width, area_height, center_x, center_y = np.meshgrid(area_width_range, area_height_range, center_x_range, center_y_range)
+    X = {'area_width': area_width, 'area_height': area_height, 'center_x': center_x, 'center_y': center_y}
+    X = [X[key] for key in optimizer._space.keys]
+    # convert to 2D array
+    X = np.array(X).reshape(len(optimizer._space.keys), -1).T
+    mu, sigma = gp.predict(X, return_std=True)
+    mu = mu.reshape(area_width.shape)
+    sigma = sigma.reshape(area_width.shape)
+    mu = np.mean(mu, axis=(optimizer._space.keys.index('area_width'), optimizer._space.keys.index('area_height')))
+    sigma = np.mean(sigma, axis=(optimizer._space.keys.index('area_width'), optimizer._space.keys.index('area_height')))
+    center_x = np.mean(center_x, axis=(optimizer._space.keys.index('area_width'), optimizer._space.keys.index('area_height')))
+    center_y = np.mean(center_y, axis=(optimizer._space.keys.index('area_width'), optimizer._space.keys.index('area_height')))
+    center_data = (center_x, center_y, mu, sigma)
     return area_data, center_data
 
 
@@ -303,14 +348,9 @@ def plot_surfaces(area_data, center_data):
     return plot_image
 
 
-def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue, results_queue_: multiprocessing.Queue,
-                    config, acquisition_function, probe=None, suggestor=False):
-    pbounds = {
-        'area_width' : (350, (config['right'] - config['left']) * (2560 + 2 * 420) / 2560),
-        'area_height': (250, config['bottom'] - config['top']),
-        'center_x'   : (config['left'], config['right']),
-        'center_y'   : (config['top'], config['bottom']),
-    }
+def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: multiprocessing.Queue,
+                    results_queue_: multiprocessing.Queue,
+                    config, acquisition_function, probe, suggestor, pbounds):
     optimizer = BayesianOptimization(
         f=run_game,
         pbounds=pbounds,
@@ -324,8 +364,9 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
     if suggestor:
         logger = JSONLogger(path="./data.json", reset=False)
         optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
-    kernel = kernels.Matern() + kernels.WhiteKernel()
-    optimizer.set_gp_params(n_restarts_optimizer=3, normalize_y=True, kernel=kernel, alpha=4e-1)
+    kernel = kernels.Matern() + kernels.WhiteKernel(noise_level_bounds=(1e-5, 1e-2))
+    optimizer.set_gp_params(n_restarts_optimizer=3, normalize_y=True, kernel=kernel, alpha=0)
+    # optimizer.set_gp_params(normalize_y=True)
     # # acquisition_function = UtilityFunction(kind="ucb", kappa=0)
     # acquisition_function_optimal = UtilityFunction(kind="ucb", kappa=0)
     # # acquisition_function = UtilityFunction(kind='ucb')
@@ -338,46 +379,52 @@ def OptimizerWorker(suggestion_queue: multiprocessing.Queue, results_queue: mult
     running = True
     while running:
         if not suggestion_queue.full():
-            if probe is None:
-                acquisition_function.update_params()
-                suggestion = optimizer.suggest(acquisition_function)
-            else:
-                suggestion = probe
-                probe = None
-            suggestion_as_array = optimizer._space._as_array(suggestion)
-            results = {}
-            for i, param in enumerate(optimizer.space.keys):
-                x = [res['params'][param] for res in optimizer.res]
-                y = [res['target'] for res in optimizer.res]
-                results[param] = x
-                results['target'] = y
-            if suggestor and fail_bounds(suggestion, config)[0]:
-                results_queue.put((suggestion_as_array, 0, results))
-                results_queue_.put((suggestion_as_array, 0, results))
-                continue
-            else:
-                plot_data = None
-                if suggestor:
+            try:
+                if probe is None:
+                    acquisition_function.update_params()
+                    suggestion = optimizer.suggest(acquisition_function)
+                else:
+                    suggestion = probe
+                    probe = None
+                suggestion_as_array = optimizer._space._as_array(suggestion)
+                results = {'target': [res['target'] for res in optimizer.res]}
+                for param in optimizer.space.keys:
+                    results[param] = [res['params'][param] for res in optimizer.res]
+                if fail_bounds(suggestion, config):
+                    results_queue.put((suggestion_as_array, 0, results))
+                    results_queue_.put((suggestion_as_array, 0, results))
+                else:
+                    # plot_data = None
+                    # if suggestor:
                     plot_data = surface_plot_data(optimizer, pbounds, suggestion)
-                suggestion_queue.put((suggestion, suggestion_as_array, results, plot_data))
+                    suggestion_queue.put((suggestion, suggestion_as_array, results, plot_data))
+            except Exception as e:
+                print(e)
+                sys.stdout.flush()
+
         while not results_queue.empty():
-            params, score, running = results_queue.get()
-            if not running:
-                break
-            # if init_points and len(results_queue_) < 30:
-            #     results_queue_.append((params, score))
-            #     if len(results_queue_) == 30:
-            #         for params, score in results_queue_:
-            #             optimizer.register(params=params, target=score)
-            #         init_points = False
-            #         results_queue_ = []
-            # else:
-            optimizer._space.register(params, score)
-            optimizer.dispatch(Events.OPTIMIZATION_STEP)
+            try:
+                params, score, running = results_queue.get()
+                if not running:
+                    break
+                # if init_points and len(results_queue_) < 30:
+                #     results_queue_.append((params, score))
+                #     if len(results_queue_) == 30:
+                #         for params, score in results_queue_:
+                #             optimizer.register(params=params, target=score)
+                #         init_points = False
+                #         results_queue_ = []
+                # else:
+                optimizer._space.register(params, score)
+                optimizer.dispatch(Events.OPTIMIZATION_STEP)
+            except Exception as e:
+                print(e)
+                sys.stdout.flush()
         sleep(0.1)
     suggestion_queue.cancel_join_thread()
     results_queue.cancel_join_thread()
     results_queue_.cancel_join_thread()
+
 
 def main():
     config = None
@@ -412,8 +459,8 @@ def main():
             'center_y'   : center_y,
         }
     # if probe is None:
-    #     area_width, area_height, center_x, center_y = convert_to_pixel_coordinates(78, 52,
-    #                                                                                158, 81,
+    #     area_width, area_height, center_x, center_y = convert_to_pixel_coordinates(83.05181, 58.72856,
+    #                                                                                158.1463, 92.91334,
     #                                                                                config)
     #     probe = {
     #         'area_width' : area_width,
@@ -432,9 +479,16 @@ def main():
     pygame.mouse.set_visible(False)
 
     if 'top' not in config.keys():
-        config = run_configurator(screen, font, config)
+        config = run_configurator(screen, font, config, probe)
         with open('config.json', 'w') as f:
             json.dump(config, f)
+
+    pbounds = {
+        'area_width' : (350, (config['right'][0] - config['left'][0]) * (2560 + 2 * 420) / 2560),
+        'area_height': (250, config['bottom'][1] - config['top'][1]),
+        'center_x'   : (config['left'][0], config['right'][0]),
+        'center_y'   : (config['top'][1], config['bottom'][1]),
+    }
 
     suggestion_queue = multiprocessing.Queue(maxsize=1)
     optimal_suggestion_queue = multiprocessing.Queue(maxsize=1)
@@ -442,31 +496,55 @@ def main():
     results_queue_ = multiprocessing.Queue()
 
     acquisition_function_optimal = UtilityFunction(kind="ucb", kappa=0)
-    # acquisition_function = UtilityFunction(kind='ei', xi=1e-8)
-    acquisition_function = UtilityFunction(kind='ucb', kappa=KAPPA)
+    # acquisition_function = UtilityFunction(kind='ucb', kappa=KAPPA)
+    acquisition_function = UtilityFunction(kind='ei', xi=1e-2)
 
     optimal_optimizer_process = multiprocessing.Process(
         target=OptimizerWorker,
-        args=(optimal_suggestion_queue, results_queue_, results_queue, config, acquisition_function_optimal, None, False),
+        args=(
+            optimal_suggestion_queue, results_queue_, results_queue, config, acquisition_function_optimal, None, False,
+            pbounds)
     )
     optimal_optimizer_process.daemon = True
     optimal_optimizer_process.start()
 
     optimizer_process = multiprocessing.Process(
         target=OptimizerWorker,
-        args=(suggestion_queue, results_queue, results_queue_, config, acquisition_function, probe, True),
+        args=(suggestion_queue, results_queue, results_queue_, config, acquisition_function, probe, True, pbounds)
     )
     optimizer_process.daemon = True
     optimizer_process.start()
+    print("Optimizer started")
+    # results_buffer = []
+    # init_points = 30 if not 'data.json' in os.listdir() else 0
 
+    optimal = False
     while True:
-        x_probe, x_probe_as_array, results, surface_plot = suggestion_queue.get()
-        optimal_x_probe, optimal_x_probe_as_array, _, _ = optimal_suggestion_queue.get()
-        score, running = run_game(x_probe, results, optimal_x_probe, screen, font, config, surface_plot)
-        results_queue.put((x_probe_as_array, score, running))
-        results_queue_.put((x_probe_as_array, score, running))
+        x_probe, x_probe_as_array, results_sug, surface_plot_sug = suggestion_queue.get()
+        optimal_x_probe, optimal_x_probe_as_array, results_opt, surface_plot_opt = optimal_suggestion_queue.get()
+        if optimal:
+            probe = optimal_x_probe
+            surface_plot = surface_plot_opt
+            results = results_opt
+        else:
+            probe = x_probe
+            surface_plot = surface_plot_sug
+            results = results_sug
+        score, running = run_game(probe, results, optimal_x_probe, screen, font, config, surface_plot)
+        # if init_points == 0:
+        results_queue.put((probe, score, running))
+        results_queue_.put((probe, score, running))
+        # else:
+        #     results_buffer.append((probe, score, running))
+            # init_points -= 1
+        optimal = not optimal
         if not running:
             break
+        # if len(results_buffer) > 0 and init_points == 0:
+        #     for params, score, running in results_buffer:
+        #         results_queue.put((params, score, running))
+        #         results_queue_.put((params, score, running))
+        #     results_buffer = []
 
     optimizer_process.join()
     optimal_optimizer_process.join()
