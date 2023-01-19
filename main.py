@@ -15,126 +15,147 @@ BUFFER_SIZE = 500
 DISTANCE_FACTOR = 1
 OPTIMIZATION_ITERATIONS = 1
 
-prev_x, prev_y = None, None
 
+class Game:
+    def __init__(self, config):
+        pygame.init()
+        window_size = (config['display']['res_width'], config['display']['res_height'])
+        self.screen = pygame.display.set_mode(window_size)
+        self.font = pygame.font.Font(None, 24)
+        pygame.mouse.set_visible(False)
 
-def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_circles):
-    global prev_x, prev_y
-    start_time = time.time()
-    area_width = params[0]
-    area_height = params[1]
-    center_x = params[2]
-    center_y = params[3]
-    rotation = params[4]
-    area_width_pixel, area_height_pixel, center_x_pixel, center_y_pixel = convert_to_pixel_coordinates(area_width,
-                                                                                                       area_height,
-                                                                                                       center_x,
-                                                                                                       center_y, config)
-    display_width, display_height = config['display']['res_width'], config['display']['res_height']
+        self.config = config
 
-    radius = 80 * display_width / 2560
-    cursor_radius = 20 * display_width / 2560
-    color = (0, 0, 255)
-    next_color = (0, 255, 0)
-    colors = [color, next_color]
+        self.prev_x = None
+        self.prev_y = None
 
-    xs, ys = [], []
-    corners = [(420 + radius, radius), (420 + radius, 1440 - radius), (2560 - 420 - radius, 1440 - radius),
-               (2560 - 420 - radius, radius)]
-    for i in range(total_circles):
-        if i == 0:
-            xs.append(display_width / 2)
-            ys.append(display_height / 2)
-        elif i < total_circles - 8:
-            xs.append(np.random.randint(420 * display_width / 2560 + radius,
-                                        2560 - 420 * display_width / 2560 - radius))
-            ys.append(np.random.randint(radius, display_height - radius))
-        else:
-            xs.append(corners[(i - (total_circles - 8)) % 4][0])
-            ys.append(corners[(i - (total_circles - 8)) % 4][1])
+        self.plots = Plotting()
+        self.display_width, self.display_height = config['display']['res_width'], config['display']['res_height']
+        self.radius = 80 * self.display_width / 2560
+        self.cursor_radius = 20 * self.display_width / 2560
+        circle_color = (0, 0, 255)
+        next_circle_color = (0, 255, 0)
+        self.colors = [circle_color, next_circle_color]
+        self.init_text = self.font.render(
+            f"Press Z or X on the circle with a black center (R to restart run/Q to quit)",
+            True,
+            (255, 255, 255))
 
-    mouse_pos_ar = []
-    circle_pos_ar = []
-    param_plot_image = None
-    error_plot_image = None
-    if len(plots.param_history) > 0:
-        param_plot_image = plots.plot_params()
-        error_plot_image = plots.plot_errors()
-    print("Setup time: ", time.time() - start_time)
-    for run in range(total_circles):
-        x = xs[run]
-        y = ys[run]
+    def run_game(self, data, prev_mouse_pos, params, total_circles):
+        start_time = time.time()
+        area_width = params[0]
+        area_height = params[1]
+        center_x = params[2]
+        center_y = params[3]
+        rotation = params[4]
+        area_width_pixel, area_height_pixel, center_x_pixel, center_y_pixel = convert_to_pixel_coordinates(area_width,
+                                                                                                           area_height,
+                                                                                                           center_x,
+                                                                                                           center_y,
+                                                                                                           self.config)
+        area_text = self.font.render(
+            f"Area: {area_width:.4f} x {area_height:.4f} Center: {center_x:.4f}, {center_y:.4f} Rotation: {rotation:.4f}°",
+            True,
+            (255, 255, 255))
+        total_steps_text = self.font.render(
+            f"Step: {data['total_steps']}",
+            True, (255, 255, 255))
+        buffer_size_text = self.font.render(
+            f"Buffer: {0 if prev_mouse_pos is None else len(prev_mouse_pos)} / {BUFFER_SIZE}",
+            True, (255, 255, 255))
+        circles_since_start_text = self.font.render(
+            f"Total circles: {len(data['mouse_pos'])}",
+            True, (255, 255, 255))
 
-        running = True
-        while running:
-            mouse_pos = pygame.mouse.get_pos()
-            cursor_pos = remap_cursor_position(mouse_pos[0], mouse_pos[1], area_width_pixel, area_height_pixel,
-                                               center_x_pixel, center_y_pixel, display_width, display_height, rotation)
+        xs, ys = [], []
+        corners = [(420 + self.radius, self.radius), (420 + self.radius, 1440 - self.radius),
+                   (2560 - 420 - self.radius, 1440 - self.radius),
+                   (2560 - 420 - self.radius, self.radius)]
+        for i in range(total_circles):
+            if i == 0:
+                xs.append(self.display_width / 2)
+                ys.append(self.display_height / 2)
+            elif i < total_circles - 8:
+                xs.append(np.random.randint(420 * self.display_width / 2560 + self.radius,
+                                            2560 - 420 * self.display_width / 2560 - self.radius))
+                ys.append(np.random.randint(self.radius, self.display_height - self.radius))
+            else:
+                xs.append(corners[(i - (total_circles - 8)) % 4][0])
+                ys.append(corners[(i - (total_circles - 8)) % 4][1])
 
-            screen.fill((0, 0, 0))
-            if param_plot_image is not None:
-                screen.blit(param_plot_image, (10, display_height // 2 - param_plot_image.get_height() // 2))
-                screen.blit(error_plot_image, (display_width - error_plot_image.get_width(),
-                                               display_height // 2 - error_plot_image.get_height() // 2))
-            pygame.draw.line(screen, (255, 255, 255), (420, 0), (420, 1440), 1)
-            pygame.draw.line(screen, (255, 255, 255), (display_width - 420, 0),
-                             (display_width - 420, 1440), 1)
+        mouse_pos_ar = []
+        circle_pos_ar = []
+        param_plot_image = None
+        error_plot_image = None
+        if len(self.plots.param_history) > 0:
+            param_plot_image = self.plots.plot_params()
+            error_plot_image = self.plots.plot_errors()
+        print("Setup time: ", time.time() - start_time)
+        for run in range(total_circles):
+            x = xs[run]
+            y = ys[run]
 
-            if prev_x is not None:
-                pygame.draw.line(screen, (40, 40, 40), (prev_x, prev_y), (x, y), 2)
-            if run < total_circles - 1:
-                pygame.draw.line(screen, (40, 40, 40), (x, y), (xs[run + 1], ys[run + 1]), 5)
-                pygame.draw.circle(screen, colors[(run + 1) % len(colors)], (xs[run + 1], ys[run + 1]), radius)
+            running = True
+            while running:
+                mouse_pos = pygame.mouse.get_pos()
+                cursor_pos = remap_cursor_position(mouse_pos[0], mouse_pos[1], area_width_pixel, area_height_pixel,
+                                                   center_x_pixel, center_y_pixel, self.display_width,
+                                                   self.display_height,
+                                                   rotation)
+                mouse_pos_text = self.font.render(f"Mouse: {mouse_pos[0]}, {mouse_pos[1]}", True, (255, 255, 255))
+                cursor_text = self.font.render(f"Cursor: {int(cursor_pos[0])}, {int(cursor_pos[1])}", True,
+                                               (255, 255, 255))
+                total_circles_text = self.font.render(
+                    f"Circle: {run + 1}/{total_circles}",
+                    True, (255, 255, 255))
 
-            pygame.draw.circle(screen, colors[run % len(colors)], (x, y), radius)
-            pygame.draw.circle(screen, (0, 0, 0), (x, y), radius // 3)
-            pygame.draw.circle(screen, (255, 0, 0), cursor_pos, cursor_radius)
+                self.screen.fill((0, 0, 0))
+                if param_plot_image is not None:
+                    self.screen.blit(param_plot_image,
+                                     (10, self.display_height // 2 - param_plot_image.get_height() // 2))
+                    self.screen.blit(error_plot_image, (self.display_width - error_plot_image.get_width(),
+                                                        self.display_height // 2 - error_plot_image.get_height() // 2))
+                pygame.draw.line(self.screen, (255, 255, 255), (420, 0), (420, 1440), 1)
+                pygame.draw.line(self.screen, (255, 255, 255), (self.display_width - 420, 0),
+                                 (self.display_width - 420, 1440), 1)
 
-            text = font.render(
-                f"Area: {area_width:.4f} x {area_height:.4f} Center: {center_x:.4f}, {center_y:.4f} Rotation: {rotation:.4f}°",
-                True,
-                (255, 255, 255))
-            screen.blit(text, (display_width // 2 - text.get_width() // 2, 0))
-            if run == 0:
-                text0 = font.render(f"Press Z or X on the circle with a black center (R to restart run/Q to quit)",
-                                    True,
-                                    (255, 255, 255))
-                screen.blit(text0, (display_width // 2 - text0.get_width() // 2, 40))
-            text3 = font.render(f"Mouse: {mouse_pos[0]}, {mouse_pos[1]}", True, (255, 255, 255))
-            screen.blit(text3, (display_width - 220, 30))
-            text4 = font.render(f"Cursor: {int(cursor_pos[0])}, {int(cursor_pos[1])}", True, (255, 255, 255))
-            screen.blit(text4, (display_width - 220, 50))
-            text6 = font.render(
-                f"Circle: {run + 1}/{total_circles}",
-                True, (255, 255, 255))
-            screen.blit(text6, (display_width - 220, 70))
-            text7 = font.render(
-                f"Step: {data['total_steps']}",
-                True, (255, 255, 255))
-            screen.blit(text7, (display_width - 220, 90))
-            text = font.render(
-                f"Buffer: {0 if prev_mouse_pos is None else len(prev_mouse_pos)} / {BUFFER_SIZE}",
-                True, (255, 255, 255))
-            screen.blit(text, (display_width - 220, 110))
-            text = font.render(
-                f"Total circles: {len(data['mouse_pos'])}",
-                True, (255, 255, 255))
-            screen.blit(text, (display_width - 220, 130))
-            pygame.display.update()
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_z or event.key == pygame.K_x:
-                        mouse_pos_ar.append(mouse_pos)
-                        circle_pos_ar.append((x, y))
+                if self.prev_x is not None:
+                    pygame.draw.line(self.screen, (40, 40, 40), (self.prev_x, self.prev_y), (x, y), 2)
+                if run < total_circles - 1:
+                    pygame.draw.line(self.screen, (40, 40, 40), (x, y), (xs[run + 1], ys[run + 1]), 5)
+                    pygame.draw.circle(self.screen, self.colors[(run + 1) % len(self.colors)],
+                                       (xs[run + 1], ys[run + 1]),
+                                       self.radius)
 
-                        running = False
-                        prev_x, prev_y = cursor_pos
-                    elif event.key == pygame.K_r:
-                        return run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_circles)
-                    elif event.key == pygame.K_q:
-                        return None
+                pygame.draw.circle(self.screen, self.colors[run % len(self.colors)], (x, y), self.radius)
+                pygame.draw.circle(self.screen, (0, 0, 0), (x, y), self.radius // 3)
+                pygame.draw.circle(self.screen, (255, 0, 0), cursor_pos, self.cursor_radius)
 
-    return mouse_pos_ar, circle_pos_ar
+                self.screen.blit(area_text, (self.display_width // 2 - area_text.get_width() // 2, 0))
+                if run == 0:
+                    self.screen.blit(self.init_text, (self.display_width // 2 - self.init_text.get_width() // 2, 40))
+                self.screen.blit(mouse_pos_text, (self.display_width - 220, 30))
+                self.screen.blit(cursor_text, (self.display_width - 220, 50))
+                self.screen.blit(total_circles_text, (self.display_width - 220, 70))
+                self.screen.blit(total_steps_text, (self.display_width - 220, 90))
+                self.screen.blit(buffer_size_text, (self.display_width - 220, 110))
+                self.screen.blit(circles_since_start_text, (self.display_width - 220, 130))
+                pygame.display.update()
+                for event in pygame.event.get():
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_z or event.key == pygame.K_x:
+                            mouse_pos_ar.append(mouse_pos)
+                            circle_pos_ar.append((x, y))
+
+                            running = False
+                            self.prev_x, self.prev_y = cursor_pos
+                        elif event.key == pygame.K_r:
+                            return self.run_game(self.plots, self.screen, self.font, data, prev_mouse_pos, params,
+                                                 total_circles)
+                        elif event.key == pygame.K_q:
+                            return None
+
+        return mouse_pos_ar, circle_pos_ar
 
 
 class Plotting:
@@ -298,12 +319,7 @@ def main():
 
     input("Make sure your tablet area is set to the full area (0 rotation) and press enter to start.")
 
-    pygame.init()
-    window_size = (config['display']['res_width'], config['display']['res_height'])
-    screen = pygame.display.set_mode(window_size)
-    font = pygame.font.Font(None, 24)
-    pygame.mouse.set_visible(False)
-    plots = Plotting()
+    game = Game(config)
 
     mouse_pos, circle_pos = None, None
     prev_mouse_pos, prev_circle_pos = None, None
@@ -331,8 +347,8 @@ def main():
                 if i < OPTIMIZATION_ITERATIONS - 1:
                     x_test = x_test[:500]
                     x_test = np.random.normal(res.x, x_test.std(0), size=(2000, 5))
-            plots.add_param(params)
-            plots.add_reg_error(y_min)
+            game.plots.add_param(params)
+            game.plots.add_reg_error(y_min)
             data['last_params'] = {'width'   : params[0],
                                    'height'  : params[1],
                                    'center_x': params[2],
@@ -342,7 +358,7 @@ def main():
                 json.dump(data, f)
 
         print("total time between runs: ", time.time() - start_time)
-        results = run_game(config, plots, screen, font, data, prev_mouse_pos, params, CIRCLES_PER_RUN)
+        results = game.run_game(data, prev_mouse_pos, params, CIRCLES_PER_RUN)
         start_time = time.time()
         if results is None:
             break
@@ -352,7 +368,7 @@ def main():
 
         mouse_pos, circle_pos = np.array(mouse_pos), np.array(circle_pos)
         error = objective_function(params, mouse_pos, circle_pos, config=config, mean=True).item()
-        plots.add_error(error)
+        game.plots.add_error(error)
         data['total_steps'] += 1
 
         if prev_mouse_pos is not None:
