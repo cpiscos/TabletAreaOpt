@@ -292,14 +292,13 @@ def main():
     pygame.mouse.set_visible(False)
     plots = Plotting()
 
-    run = 0
     mouse_pos, circle_pos = None, None
     prev_mouse_pos, prev_circle_pos = None, None
     if len(data['mouse_pos']) > 0:
         prev_mouse_pos = np.array(data['mouse_pos'])
         prev_circle_pos = np.array(data['circle_pos'])
     while True:
-        if run == 0:
+        if mouse_pos is None:
             params = first_param
         else:
             obj_function = partial(objective_function, mouse_pos_ar=mouse_pos, circle_pos_ar=circle_pos, config=config)
@@ -339,7 +338,6 @@ def main():
         plots.add_error(error)
         # mouse_pos, circle_pos = (mouse_pos[errors.argsort()][CIRCLES_PER_RUN // 2:],
         #                          circle_pos[errors.argsort()][CIRCLES_PER_RUN // 2:])
-        run += 1
         data['total_steps'] += 1
 
         # if error <= 0.01 and prev_mouse_pos is not None:
