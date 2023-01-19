@@ -42,6 +42,12 @@ class Game:
             (255, 255, 255))
 
     def run_game(self, data, prev_mouse_pos, params, total_circles):
+        playfield_height = 0.92 * self.display_height
+        playfield_width = 4 / 3 * playfield_height
+        playfield_top = self.display_height - playfield_height
+        playfield_left = (self.display_width - playfield_width) / 2
+        playfield_right = playfield_left + playfield_width
+        playfield_bottom = self.display_height
         start_time = time.time()
         area_width = params[0]
         area_height = params[1]
@@ -68,17 +74,19 @@ class Game:
             True, (255, 255, 255))
 
         xs, ys = [], []
-        corners = [(420 + self.radius, self.radius), (420 + self.radius, 1440 - self.radius),
-                   (2560 - 420 - self.radius, 1440 - self.radius),
-                   (2560 - 420 - self.radius, self.radius)]
+        # counterclockwise rotation from top left
+        corners = [(playfield_left + self.radius, playfield_top + self.radius),
+                   (playfield_left + self.radius, playfield_bottom - self.radius),
+                   (playfield_right - self.radius, playfield_bottom - self.radius),
+                   (playfield_right - self.radius, playfield_top + self.radius)]
+
         for i in range(total_circles):
             if i == 0:
                 xs.append(self.display_width / 2)
-                ys.append(self.display_height / 2)
+                ys.append(self.display_height - playfield_height / 2)
             elif i < total_circles - 8:
-                xs.append(np.random.randint(420 * self.display_width / 2560 + self.radius,
-                                            2560 - 420 * self.display_width / 2560 - self.radius))
-                ys.append(np.random.randint(self.radius, self.display_height - self.radius))
+                xs.append(np.random.randint(playfield_left + self.radius, playfield_right - self.radius))
+                ys.append(np.random.randint(playfield_top + self.radius, playfield_bottom - self.radius))
             else:
                 xs.append(corners[(i - (total_circles - 8)) % 4][0])
                 ys.append(corners[(i - (total_circles - 8)) % 4][1])
@@ -112,12 +120,15 @@ class Game:
                 self.screen.fill((0, 0, 0))
                 if param_plot_image is not None:
                     self.screen.blit(param_plot_image,
-                                     (10, self.display_height // 2 - param_plot_image.get_height() // 2))
+                                     (20, self.display_height // 2 - param_plot_image.get_height() // 2))
                     self.screen.blit(error_plot_image, (self.display_width - error_plot_image.get_width(),
                                                         self.display_height // 2 - error_plot_image.get_height() // 2))
-                pygame.draw.line(self.screen, (255, 255, 255), (420, 0), (420, 1440), 1)
-                pygame.draw.line(self.screen, (255, 255, 255), (self.display_width - 420, 0),
-                                 (self.display_width - 420, 1440), 1)
+                pygame.draw.line(self.screen, (255, 255, 255), (playfield_left, playfield_top),
+                                 (playfield_right, playfield_top))
+                pygame.draw.line(self.screen, (255, 255, 255), (playfield_left, playfield_top),
+                                 (playfield_left, playfield_bottom))
+                pygame.draw.line(self.screen, (255, 255, 255), (playfield_right, playfield_top),
+                                 (playfield_right, playfield_bottom))
 
                 if self.prev_x is not None:
                     pygame.draw.line(self.screen, (40, 40, 40), (self.prev_x, self.prev_y), (x, y), 2)
@@ -150,8 +161,7 @@ class Game:
                             running = False
                             self.prev_x, self.prev_y = cursor_pos
                         elif event.key == pygame.K_r:
-                            return self.run_game(self.plots, self.screen, self.font, data, prev_mouse_pos, params,
-                                                 total_circles)
+                            return self.run_game(data, prev_mouse_pos, params, total_circles)
                         elif event.key == pygame.K_q:
                             return None
 
@@ -233,6 +243,7 @@ def run_configurator():
 
     tablet = {}
     probe = {}
+
     if input('Would you like to enter a starting area? Otherwise will start with full area (y/n)') == 'y':
         probe['width'] = float(input('Enter current width: '))
         probe['height'] = float(input('Enter current height: '))
@@ -286,7 +297,7 @@ def objective_function(x, mouse_pos_ar, circle_pos_ar, config, radius=80, mean=T
     if circle_pos_ar.ndim == 2:
         circle_pos_ar = circle_pos_ar[None, :, :]
     dist = np.linalg.norm(predicted_cursor_pos - circle_pos_ar, axis=2) / radius
-    dist_outside_radius = np.clip(dist-1, 0, None)
+    dist_outside_radius = np.clip(dist - 1, 0, 5)
     dist_from_center = np.linalg.norm(circle_pos_ar - np.array([config['display']['res_width'] / 2,
                                                                 config['display']['res_height'] / 2])[None, None, :],
                                       axis=2) / radius
