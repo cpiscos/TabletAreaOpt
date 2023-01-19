@@ -229,7 +229,7 @@ def run_configurator():
         return run_configurator()
 
 
-def objective_function(config, x, mouse_pos_ar, circle_pos_ar, radius=80, mean=True):
+def objective_function(x, mouse_pos_ar, circle_pos_ar, config, radius=80, mean=True):
     if type(x) == list or type(x) == tuple:
         x = np.array(x)
     if x.ndim == 1:
@@ -299,7 +299,7 @@ def main():
         if run == 0:
             params = first_param
         else:
-            obj_function = partial(objective_function, mouse_pos_ar=mouse_pos, circle_pos_ar=circle_pos)
+            obj_function = partial(objective_function, mouse_pos_ar=mouse_pos, circle_pos_ar=circle_pos, config=config)
             params = None
             y_min = 1e6
             for _ in range(2):
@@ -329,7 +329,7 @@ def main():
         data['circle_pos'].extend(circle_pos)
 
         mouse_pos, circle_pos = np.array(mouse_pos), np.array(circle_pos)
-        error = objective_function(config, params, mouse_pos, circle_pos, mean=True).item()
+        error = objective_function(params, mouse_pos, circle_pos, config=config, mean=True).item()
         plots.add_error(error)
         # mouse_pos, circle_pos = (mouse_pos[errors.argsort()][CIRCLES_PER_RUN // 2:],
         #                          circle_pos[errors.argsort()][CIRCLES_PER_RUN // 2:])
