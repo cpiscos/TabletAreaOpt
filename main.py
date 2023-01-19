@@ -13,7 +13,7 @@ from scipy.optimize import minimize
 CIRCLES_PER_RUN = 50
 BUFFER_SIZE = 500
 DISTANCE_FACTOR = 1
-OPTIMIZATION_ITERATIONS = 5
+OPTIMIZATION_ITERATIONS = 1
 
 
 def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_circles):
@@ -320,7 +320,8 @@ def main():
                     y_min = res.fun
                     params = res.x
                     print(f"{i}: {y_min}, {params}")
-                x_test = np.random.normal(res.x, x_test.std(0), size=(2000, 5))
+                if i < OPTIMIZATION_ITERATIONS - 1:
+                    x_test = np.random.normal(res.x, x_test.std(0), size=(2000, 5))
             plots.add_history(params)
             plots.add_reg_error(y_min)
             # params[0] *= 1.01
