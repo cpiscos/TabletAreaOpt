@@ -302,8 +302,8 @@ def main():
     prev_mouse_pos, prev_circle_pos = None, None
     start_time = time.time()
     if len(data['mouse_pos']) > 0:
-        prev_mouse_pos = np.array(data['mouse_pos'])
-        prev_circle_pos = np.array(data['circle_pos'])
+        prev_mouse_pos = np.array(data['mouse_pos'])[-BUFFER_SIZE:]
+        prev_circle_pos = np.array(data['circle_pos'])[-BUFFER_SIZE:]
     while True:
         if mouse_pos is None:
             params = first_param
@@ -315,13 +315,14 @@ def main():
             print("time 2: ", time.time() - start_time)
             for i in range(OPTIMIZATION_ITERATIONS):
                 ys = obj_function(x_test)
-                x_test = x_test[ys.argsort()][:500]
+                x_test = x_test[ys.argsort()]
                 res = minimize(obj_function, x_test[0], bounds=bounds, method='L-BFGS-B')
                 if res.fun < y_min:
                     y_min = res.fun
                     params = res.x
                     print(f"{i}: {y_min}, {params}")
                 if i < OPTIMIZATION_ITERATIONS - 1:
+                    x_test = x_test[:500]
                     x_test = np.random.normal(res.x, x_test.std(0), size=(2000, 5))
             plots.add_history(params)
             plots.add_reg_error(y_min)
