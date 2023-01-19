@@ -3,6 +3,7 @@ import os
 import time
 
 import pygame
+import pygame.gfxdraw
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -126,30 +127,50 @@ class Game:
                                       self.display_height // 2 - param_plot_image.get_height() // 2))
                     self.screen.blit(error_plot_image, (self.config['playfield']['right'],
                                                         self.display_height // 2 - error_plot_image.get_height() // 2))
-                pygame.draw.line(self.screen, (255, 255, 255),
-                                 (self.config['playfield']['left'], self.config['playfield']['top']),
-                                 (self.config['playfield']['right'], self.config['playfield']['top']))
-                pygame.draw.line(self.screen, (255, 255, 255),
-                                 (self.config['playfield']['left'], self.config['playfield']['top']),
-                                 (self.config['playfield']['left'], self.config['playfield']['bottom']))
-                pygame.draw.line(self.screen, (255, 255, 255),
-                                 (self.config['playfield']['right'], self.config['playfield']['top']),
-                                 (self.config['playfield']['right'], self.config['playfield']['bottom']))
+                # pygame.draw.line(self.screen, (255, 255, 255),
+                #                  (self.config['playfield']['left'], self.config['playfield']['top']),
+                #                  (self.config['playfield']['right'], self.config['playfield']['top']))
+                # pygame.draw.line(self.screen, (255, 255, 255),
+                #                  (self.config['playfield']['left'], self.config['playfield']['top']),
+                #                  (self.config['playfield']['left'], self.config['playfield']['bottom']))
+                # pygame.draw.line(self.screen, (255, 255, 255),
+                #                  (self.config['playfield']['right'], self.config['playfield']['top']),
+                #                  (self.config['playfield']['right'], self.config['playfield']['bottom']))
+                #
+                # if run < total_circles - 1:
+                #     pygame.draw.line(self.screen, (40, 40, 40), (x, y), (xs[run + 1], ys[run + 1]), 5)
+                #     pygame.draw.circle(self.screen, self.colors[(run + 1) % len(self.colors)],
+                #                        (xs[run + 1], ys[run + 1]),
+                #                        self.radius)
+                #
+                # pygame.draw.circle(self.screen, self.colors[run % len(self.colors)], (x, y), self.radius)
+                # pygame.draw.circle(self.screen, (0, 0, 0), (x, y), self.radius // 3)
+                # pygame.draw.circle(self.screen, (255, 0, 0), cursor_pos, self.cursor_radius)
+                # pygame.draw.line(self.screen, (100, 0, 0), (cursor_pos[0], cursor_pos[1]), (x, y), 2)
 
-                pygame.draw.line(self.screen, (100, 0, 0), (cursor_pos[0], cursor_pos[1]), (x, y), 2)
+                # with pygame.gfxdraw
+                pygame.gfxdraw.line(self.screen, int(self.config['playfield']['left']), int(self.config['playfield']['top']),
+                                    int(self.config['playfield']['right']), int(self.config['playfield']['top']),
+                                    (255, 255, 255))
+                pygame.gfxdraw.line(self.screen, int(self.config['playfield']['left']), int(self.config['playfield']['top']),
+                                    int(self.config['playfield']['left']), int(self.config['playfield']['bottom']),
+                                    (255, 255, 255))
+                pygame.gfxdraw.line(self.screen, int(self.config['playfield']['right']), int(self.config['playfield']['top']),
+                                    int(self.config['playfield']['right']), int(self.config['playfield']['bottom']),
+                                    (255, 255, 255))
+
                 if run < total_circles - 1:
-                    pygame.draw.line(self.screen, (40, 40, 40), (x, y), (xs[run + 1], ys[run + 1]), 5)
-                    pygame.draw.circle(self.screen, self.colors[(run + 1) % len(self.colors)],
-                                       (xs[run + 1], ys[run + 1]),
-                                       self.radius)
+                    pygame.gfxdraw.line(self.screen, int(x), int(y), int(xs[run + 1]), int(ys[run + 1]), (40, 40, 40))
+                    pygame.gfxdraw.filled_circle(self.screen, int(xs[run + 1]), int(ys[run + 1]), int(self.radius),
+                                                    self.colors[(run + 1) % len(self.colors)])
 
-                pygame.draw.circle(self.screen, self.colors[run % len(self.colors)], (x, y), self.radius)
-                pygame.draw.circle(self.screen, (0, 0, 0), (x, y), self.radius // 3)
-                pygame.draw.circle(self.screen, (255, 0, 0), cursor_pos, self.cursor_radius)
+                pygame.gfxdraw.filled_circle(self.screen, int(x), int(y), int(self.radius), self.colors[run % len(self.colors)])
+                pygame.gfxdraw.filled_circle(self.screen, int(x), int(y), int(self.radius // 3), (0, 0, 0))
+                pygame.gfxdraw.filled_circle(self.screen, int(cursor_pos[0]), int(cursor_pos[1]), int(self.cursor_radius), (255, 0, 0))
+                pygame.gfxdraw.line(self.screen, int(cursor_pos[0]), int(cursor_pos[1]), int(x), int(y), (100, 0, 0))
 
                 self.screen.blit(area_text, (self.display_width // 2 - area_text.get_width() // 2, 0))
-                if run == 0:
-                    self.screen.blit(self.init_text, (self.display_width // 2 - self.init_text.get_width() // 2, 40))
+                self.screen.blit(self.init_text, (self.display_width // 2 - self.init_text.get_width() // 2, 40))
                 self.screen.blit(mouse_pos_text, (self.display_width - 220, 30))
                 self.screen.blit(cursor_text, (self.display_width - 220, 50))
                 self.screen.blit(total_circles_text, (self.display_width - 220, 70))
