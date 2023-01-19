@@ -413,8 +413,10 @@ def main():
         # randomize prev_mouse_pos and prev_circle_pos
 
         if prev_mouse_pos is not None:
-            prev_mouse_pos = mouse_pos[np.random.choice(len(mouse_pos), min(len(mouse_pos), BUFFER_SIZE-CIRCLES_PER_RUN), replace=False)]
-            prev_circle_pos = circle_pos[np.random.choice(len(circle_pos), min(len(circle_pos), BUFFER_SIZE-CIRCLES_PER_RUN), replace=False)]
+            indices = np.random.choice(len(prev_mouse_pos), min(len(prev_mouse_pos), BUFFER_SIZE - CIRCLES_PER_RUN),
+                                       replace=False)
+            prev_mouse_pos = prev_mouse_pos[indices]
+            prev_circle_pos = prev_circle_pos[indices]
             mouse_pos = np.concatenate((prev_mouse_pos, mouse_pos))
             circle_pos = np.concatenate((prev_circle_pos, circle_pos))
         prev_mouse_pos, prev_circle_pos = mouse_pos, circle_pos
