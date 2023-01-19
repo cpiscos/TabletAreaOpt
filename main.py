@@ -190,8 +190,8 @@ class Plotting:
         self.reg_error_history.append(error)
 
     def plot_params(self):
-        fig, ax = plt.subplots(5, 1, figsize=(4.1, 12))
-        fig.tight_layout(pad=1.5)
+        fig, ax = plt.subplots(5, 1, figsize=(3.5, 12))
+        fig.tight_layout(pad=2)
         fig.set_facecolor('black')
         ax = ax.flatten()
         for i, name in enumerate(['Width', 'Height', 'X', 'Y', 'Rotation']):
@@ -208,8 +208,8 @@ class Plotting:
         return self.fig_to_plot_image(fig)
 
     def plot_errors(self):
-        fig, ax = plt.subplots(2, 1, figsize=(4.1, 4))
-        fig.tight_layout(pad=1.5)
+        fig, ax = plt.subplots(2, 1, figsize=(3.5, 4))
+        fig.tight_layout(pad=2)
         fig.set_facecolor('black')
         ax = ax.flatten()
         ax[0].plot(self.error_history, color='white')
