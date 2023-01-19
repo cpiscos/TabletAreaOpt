@@ -10,6 +10,7 @@ from scipy.optimize import minimize
 
 CIRCLES_PER_RUN = 50
 BUFFER_SIZE = 500
+DISTANCE_FACTOR = 1
 
 
 def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_circles):
@@ -233,14 +234,10 @@ def objective_function(x, mouse_pos_ar, circle_pos_ar, config, radius=80, mean=T
         x = np.array(x)
     if x.ndim == 1:
         area_width, area_height, center_x, center_y, rotation = x[0, None, None], x[1, None, None], x[
-            2, None, None], x[
-            3, None, None], x[4, None, None]
+            2, None, None], x[3, None, None], x[4, None, None]
     else:
-        area_width, area_height, center_x, center_y, rotation = x[:, 0, None], x[:, 1, None], x[:, 2, None], x[:, 3,
-                                                                                                             None], x[
-                                                                                                                    :,
-                                                                                                                    4,
-                                                                                                                    None]
+        area_width, area_height, center_x, center_y, rotation = (
+            x[:, 0, None], x[:, 1, None], x[:, 2, None], x[:, 3, None], x[:, 4, None])
     area_width, area_height, center_x, center_y = convert_to_pixel_coordinates(area_width, area_height, center_x,
                                                                                center_y, config)
 
@@ -253,10 +250,14 @@ def objective_function(x, mouse_pos_ar, circle_pos_ar, config, radius=80, mean=T
     if circle_pos_ar.ndim == 2:
         circle_pos_ar = circle_pos_ar[None, :, :]
     dist = np.linalg.norm(predicted_cursor_pos - circle_pos_ar, axis=2) / radius
+    dist_from_center = np.linalg.norm(circle_pos_ar - np.array([config['display']['res_width'] / 2,
+                                                                config['display']['res_height'] / 2])[None, None, :],
+                                      axis=2) / radius
+    weight = 1 + DISTANCE_FACTOR * dist_from_center
     if mean:
-        return np.mean(dist ** 2, 1)
+        return np.mean((dist ** 2) * weight, 1)
     else:
-        return dist ** 2
+        return (dist ** 2) * weight
 
 
 def main():
