@@ -1,5 +1,7 @@
 import json
 import os
+import time
+
 import pygame
 import numpy as np
 from matplotlib import pyplot as plt
@@ -11,10 +13,11 @@ from scipy.optimize import minimize
 CIRCLES_PER_RUN = 50
 BUFFER_SIZE = 500
 DISTANCE_FACTOR = 1
-OPTIMIZATION_ITERATIONS = 100
+OPTIMIZATION_ITERATIONS = 5
 
 
 def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_circles):
+    start_time = time.time()
     area_width = params[0]
     area_height = params[1]
     center_x = params[2]
@@ -54,7 +57,7 @@ def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_ci
     if len(plots.param_history) > 0:
         param_plot_image = plots.plot_params()
         error_plot_image = plots.plot_errors()
-
+    print("Setup time: ", time.time() - start_time)
     for run in range(total_circles):
         x = xs[run]
         y = ys[run]
@@ -296,6 +299,7 @@ def main():
 
     mouse_pos, circle_pos = None, None
     prev_mouse_pos, prev_circle_pos = None, None
+    start_time = time.time()
     if len(data['mouse_pos']) > 0:
         prev_mouse_pos = np.array(data['mouse_pos'])
         prev_circle_pos = np.array(data['circle_pos'])
@@ -307,6 +311,7 @@ def main():
             params = None
             y_min = 1e6
             x_test = np.random.uniform(bounds[:, 0], bounds[:, 1], size=(2000, 5))
+            print("time 2: ", time.time() - start_time)
             for i in range(OPTIMIZATION_ITERATIONS):
                 ys = obj_function(x_test)
                 x_test = x_test[ys.argsort()][:500]
@@ -325,9 +330,12 @@ def main():
                                    'center_x': params[2],
                                    'center_y': params[3],
                                    'rotation': params[4]}
-            with open('data.json', 'w') as f:
-                json.dump(data, f)
+            # with open('data.json', 'w') as f:
+            #     json.dump(data, f)
+
+        print("total time between runs: ", time.time() - start_time)
         results = run_game(config, plots, screen, font, data, prev_mouse_pos, params, CIRCLES_PER_RUN)
+        start_time = time.time()
         if results is None:
             break
         mouse_pos, circle_pos = results
@@ -346,6 +354,7 @@ def main():
             mouse_pos = np.concatenate((prev_mouse_pos, mouse_pos))[-BUFFER_SIZE:]
             circle_pos = np.concatenate((prev_circle_pos, circle_pos))[-BUFFER_SIZE:]
         prev_mouse_pos, prev_circle_pos = mouse_pos, circle_pos
+        print("time 1: ", time.time() - start_time)
 
 
 if __name__ == '__main__':
