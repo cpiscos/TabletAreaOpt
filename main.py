@@ -38,7 +38,7 @@ class Game:
         next_circle_color = (0, 255, 0)
         self.colors = [circle_color, next_circle_color]
         self.init_text = self.font.render(
-            f"Press Z or X on the circle with a black center (R to restart run/Q to quit)",
+            f"Press Z or X on the circle with a black center. Aim for the center. (R to restart run/Q to quit)",
             True,
             (255, 255, 255))
         self.clock = pygame.time.Clock()
@@ -314,15 +314,15 @@ def objective_function(x, mouse_pos_ar, circle_pos_ar, config, radius=80, mean=T
     if circle_pos_ar.ndim == 2:
         circle_pos_ar = circle_pos_ar[None, :, :]
     dist = np.linalg.norm(predicted_cursor_pos - circle_pos_ar, axis=2) / radius
-    dist_outside_radius = np.clip(dist - 1, 0, 5)
+    dist = np.clip(dist, 0, 5)
     dist_from_center = np.linalg.norm(circle_pos_ar - np.array([config['display']['res_width'] / 2,
                                                                 config['display']['res_height'] / 2])[None, None, :],
                                       axis=2) / radius
     weight = 1 + DISTANCE_FACTOR * dist_from_center
     if mean:
-        return np.mean((dist_outside_radius ** 2) * weight, 1)
+        return np.mean((dist ** 2) * weight, 1)
     else:
-        return (dist_outside_radius ** 2) * weight
+        return (dist ** 2) * weight
 
 
 def main():
