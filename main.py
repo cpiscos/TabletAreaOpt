@@ -410,7 +410,6 @@ def main():
         error = objective_function(params, mouse_pos, circle_pos, config=config, mean=True).item()
         game.plots.add_error(error)
         data['total_steps'] += 1
-        # randomize prev_mouse_pos and prev_circle_pos
 
         if prev_mouse_pos is not None:
             indices = np.random.choice(len(prev_mouse_pos), min(len(prev_mouse_pos), BUFFER_SIZE - CIRCLES_PER_RUN),
