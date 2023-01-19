@@ -56,6 +56,7 @@ def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_ci
     mouse_pos_ar = []
     circle_pos_ar = []
     param_plot_image = None
+    error_plot_image = None
     if len(plots.param_history) > 0:
         param_plot_image = plots.plot_params()
         error_plot_image = plots.plot_errors()
@@ -216,6 +217,7 @@ def run_configurator():
         probe['height'] = float(input('Enter current height: '))
         probe['center_x'] = float(input('Enter current x: '))
         probe['center_y'] = float(input('Enter current y: '))
+        # noinspection PyTypedDict
         probe['rotation'] = float(input('Enter current rotation: '))
 
     input('Resize your current area to full area and press enter...')
@@ -331,8 +333,6 @@ def main():
                     x_test = np.random.normal(res.x, x_test.std(0), size=(2000, 5))
             plots.add_param(params)
             plots.add_reg_error(y_min)
-            # params[0] *= 1.01
-            # params[1] *= 1.01
             data['last_params'] = {'width'   : params[0],
                                    'height'  : params[1],
                                    'center_x': params[2],
@@ -353,11 +353,8 @@ def main():
         mouse_pos, circle_pos = np.array(mouse_pos), np.array(circle_pos)
         error = objective_function(params, mouse_pos, circle_pos, config=config, mean=True).item()
         plots.add_error(error)
-        # mouse_pos, circle_pos = (mouse_pos[errors.argsort()][CIRCLES_PER_RUN // 2:],
-        #                          circle_pos[errors.argsort()][CIRCLES_PER_RUN // 2:])
         data['total_steps'] += 1
 
-        # if error <= 0.01 and prev_mouse_pos is not None:
         if prev_mouse_pos is not None:
             mouse_pos = np.concatenate((prev_mouse_pos, mouse_pos))[-BUFFER_SIZE:]
             circle_pos = np.concatenate((prev_circle_pos, circle_pos))[-BUFFER_SIZE:]
