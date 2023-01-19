@@ -137,7 +137,7 @@ class Plotting:
         self.error_history = []
         self.reg_error_history = []
 
-    def add_history(self, params):
+    def add_param(self, params):
         self.param_history.append(params)
 
     def add_error(self, error):
@@ -324,7 +324,7 @@ def main():
                 if i < OPTIMIZATION_ITERATIONS - 1:
                     x_test = x_test[:500]
                     x_test = np.random.normal(res.x, x_test.std(0), size=(2000, 5))
-            plots.add_history(params)
+            plots.add_param(params)
             plots.add_reg_error(y_min)
             # params[0] *= 1.01
             # params[1] *= 1.01
@@ -333,8 +333,8 @@ def main():
                                    'center_x': params[2],
                                    'center_y': params[3],
                                    'rotation': params[4]}
-            # with open('data.json', 'w') as f:
-            #     json.dump(data, f)
+            with open('data.json', 'w') as f:
+                json.dump(data, f)
 
         print("total time between runs: ", time.time() - start_time)
         results = run_game(config, plots, screen, font, data, prev_mouse_pos, params, CIRCLES_PER_RUN)
