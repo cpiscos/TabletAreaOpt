@@ -89,7 +89,8 @@ def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_ci
                 (255, 255, 255))
             screen.blit(text, (display_width // 2 - text.get_width() // 2, 0))
             if run == 0:
-                text0 = font.render(f"Press Z or X on the circle with a black center (Q to restart run)", True,
+                text0 = font.render(f"Press Z or X on the circle with a black center (R to restart run/Q to quit)",
+                                    True,
                                     (255, 255, 255))
                 screen.blit(text0, (display_width // 2 - text0.get_width() // 2, 40))
             text3 = font.render(f"Mouse: {mouse_pos[0]}, {mouse_pos[1]}", True, (255, 255, 255))
@@ -117,8 +118,10 @@ def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_ci
 
                         running = False
                         prev_x, prev_y = cursor_pos
-                    elif event.key == pygame.K_q:
+                    elif event.key == pygame.K_r:
                         return run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_circles)
+                    elif event.key == pygame.K_q:
+                        return None
 
     return mouse_pos_ar, circle_pos_ar
 
@@ -324,7 +327,10 @@ def main():
                                    'rotation': params[4]}
             with open('data.json', 'w') as f:
                 json.dump(data, f)
-        mouse_pos, circle_pos = run_game(config, plots, screen, font, data, prev_mouse_pos, params, CIRCLES_PER_RUN)
+        results = run_game(config, plots, screen, font, data, prev_mouse_pos, params, CIRCLES_PER_RUN)
+        if results is None:
+            break
+        mouse_pos, circle_pos = results
         data['mouse_pos'].extend(mouse_pos)
         data['circle_pos'].extend(circle_pos)
 
