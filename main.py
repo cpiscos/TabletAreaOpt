@@ -66,7 +66,7 @@ def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_ci
 
             screen.fill((0, 0, 0))
             if param_plot_image is not None:
-                screen.blit(param_plot_image, (0, display_height // 2 - param_plot_image.get_height() // 2))
+                screen.blit(param_plot_image, (10, display_height // 2 - param_plot_image.get_height() // 2))
                 screen.blit(error_plot_image, (display_width - error_plot_image.get_width(),
                                                display_height // 2 - error_plot_image.get_height() // 2))
             pygame.draw.line(screen, (255, 255, 255), (420, 0), (420, 1440), 1)
@@ -93,21 +93,21 @@ def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_ci
                                     (255, 255, 255))
                 screen.blit(text0, (display_width // 2 - text0.get_width() // 2, 40))
             text3 = font.render(f"Mouse: {mouse_pos[0]}, {mouse_pos[1]}", True, (255, 255, 255))
-            screen.blit(text3, (display_width - 200, 30))
+            screen.blit(text3, (display_width - 220, 30))
             text4 = font.render(f"Cursor: {int(cursor_pos[0])}, {int(cursor_pos[1])}", True, (255, 255, 255))
-            screen.blit(text4, (display_width - 200, 50))
+            screen.blit(text4, (display_width - 220, 50))
             text6 = font.render(
                 f"Circle: {run + 1}/{total_circles}",
                 True, (255, 255, 255))
-            screen.blit(text6, (display_width - 200, 70))
+            screen.blit(text6, (display_width - 220, 70))
             text7 = font.render(
                 f"Step: {data['total_steps']}",
                 True, (255, 255, 255))
-            screen.blit(text7, (display_width - 200, 90))
+            screen.blit(text7, (display_width - 220, 90))
             text = font.render(
                 f"Buffer: {0 if prev_mouse_pos is None else len(prev_mouse_pos)} / {BUFFER_SIZE}",
                 True, (255, 255, 255))
-            screen.blit(text, (display_width - 200, 110))
+            screen.blit(text, (display_width - 220, 110))
             pygame.display.update()
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
@@ -143,7 +143,7 @@ class Plotting:
         fig.tight_layout(pad=1.5)
         fig.set_facecolor('black')
         ax = ax.flatten()
-        for i, name in enumerate(['width', 'height', 'center_x', 'center_y', 'rotation']):
+        for i, name in enumerate(['Width', 'Height', 'X', 'Y', 'Rotation']):
             ax[i].plot([p[i] for p in self.param_history], color='white')
             ax[i].set_title(name, color='white')
             ax[i].set_facecolor('black')
