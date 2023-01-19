@@ -11,6 +11,7 @@ from scipy.optimize import minimize
 CIRCLES_PER_RUN = 50
 BUFFER_SIZE = 500
 DISTANCE_FACTOR = 1
+OPTIMIZATION_ITERATIONS = 100
 
 
 def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_circles):
@@ -305,17 +306,16 @@ def main():
             obj_function = partial(objective_function, mouse_pos_ar=mouse_pos, circle_pos_ar=circle_pos, config=config)
             params = None
             y_min = 1e6
-            for _ in range(2):
-                x_test = np.random.uniform(bounds[:, 0], bounds[:, 1], size=(1000, 5))
-                for i in range(100):
-                    ys = obj_function(x_test)
-                    x_test = x_test[ys.argsort()][:500]
-                    res = minimize(obj_function, x_test[0], bounds=bounds, method='L-BFGS-B')
-                    if res.fun < y_min:
-                        y_min = res.fun
-                        params = res.x
-                        print(f"{i}: {y_min}, {params}")
-                    x_test = np.random.normal(res.x, x_test.std(0), size=(1000, 5))
+            x_test = np.random.uniform(bounds[:, 0], bounds[:, 1], size=(2000, 5))
+            for i in range(OPTIMIZATION_ITERATIONS):
+                ys = obj_function(x_test)
+                x_test = x_test[ys.argsort()][:500]
+                res = minimize(obj_function, x_test[0], bounds=bounds, method='L-BFGS-B')
+                if res.fun < y_min:
+                    y_min = res.fun
+                    params = res.x
+                    print(f"{i}: {y_min}, {params}")
+                x_test = np.random.normal(res.x, x_test.std(0), size=(2000, 5))
             plots.add_history(params)
             plots.add_reg_error(y_min)
             # params[0] *= 1.01
