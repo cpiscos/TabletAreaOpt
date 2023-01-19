@@ -264,6 +264,7 @@ def objective_function(x, mouse_pos_ar, circle_pos_ar, config, radius=80, mean=T
 
 
 def main():
+    os.system('cls' if os.name == 'nt' else 'clear')
     if 'config.json' not in os.listdir():
         config = run_configurator()
     else:
@@ -283,7 +284,7 @@ def main():
     bounds = np.array([(0, config['tablet']['width']), (0, config['tablet']['height']), (0, config['tablet']['width']),
                        (0, config['tablet']['height']), (-60, 60)])
 
-    input("Make sure your tablet area is set to the full area and press enter to start the game.")
+    input("Make sure your tablet area is set to the full area (0 rotation) and press enter to start.")
 
     pygame.init()
     window_size = (config['display']['res_width'], config['display']['res_height'])
