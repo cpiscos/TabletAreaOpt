@@ -17,6 +17,7 @@ OPTIMIZATION_ITERATIONS = 1
 
 prev_x, prev_y = None, None
 
+
 def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_circles):
     global prev_x, prev_y
     start_time = time.time()
@@ -114,6 +115,10 @@ def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_ci
                 f"Buffer: {0 if prev_mouse_pos is None else len(prev_mouse_pos)} / {BUFFER_SIZE}",
                 True, (255, 255, 255))
             screen.blit(text, (display_width - 220, 110))
+            text = font.render(
+                f"Total circles: {len(data['mouse_pos'])}",
+                True, (255, 255, 255))
+            screen.blit(text, (display_width - 220, 130))
             pygame.display.update()
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
