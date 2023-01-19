@@ -111,9 +111,8 @@ def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_ci
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_z or event.key == pygame.K_x:
-                        if run > 0:
-                            mouse_pos_ar.append(mouse_pos)
-                            circle_pos_ar.append((x, y))
+                        mouse_pos_ar.append(mouse_pos)
+                        circle_pos_ar.append((x, y))
 
                         running = False
                         prev_x, prev_y = cursor_pos
