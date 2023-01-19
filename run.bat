@@ -1,1 +1,1 @@
-%cd%/venv/Scripts/python ./reg_test.py
+%cd%/venv/Scripts/python ./main.py
