@@ -40,14 +40,9 @@ class Game:
             f"Press Z or X on the circle with a black center (R to restart run/Q to quit)",
             True,
             (255, 255, 255))
+        self.clock = pygame.time.Clock()
 
     def run_game(self, data, prev_mouse_pos, params, total_circles):
-        playfield_height = 0.92 * self.display_height
-        playfield_width = 4 / 3 * playfield_height
-        playfield_top = self.display_height - playfield_height
-        playfield_left = (self.display_width - playfield_width) / 2
-        playfield_right = playfield_left + playfield_width
-        playfield_bottom = self.display_height
         start_time = time.time()
         area_width = params[0]
         area_height = params[1]
@@ -75,18 +70,20 @@ class Game:
 
         xs, ys = [], []
         # counterclockwise rotation from top left
-        corners = [(playfield_left + self.radius, playfield_top + self.radius),
-                   (playfield_left + self.radius, playfield_bottom - self.radius),
-                   (playfield_right - self.radius, playfield_bottom - self.radius),
-                   (playfield_right - self.radius, playfield_top + self.radius)]
+        corners = [(self.config['playfield']['left'] + self.radius, self.config['playfield']['top'] + self.radius),
+                   (self.config['playfield']['left'] + self.radius, self.config['playfield']['bottom'] - self.radius),
+                   (self.config['playfield']['right'] - self.radius, self.config['playfield']['bottom'] - self.radius),
+                   (self.config['playfield']['right'] - self.radius, self.config['playfield']['top'] + self.radius)]
 
         for i in range(total_circles):
             if i == 0:
                 xs.append(self.display_width / 2)
-                ys.append(self.display_height - playfield_height / 2)
+                ys.append(self.display_height - self.config['playfield']['height'] / 2)
             elif i < total_circles - 8:
-                xs.append(np.random.randint(playfield_left + self.radius, playfield_right - self.radius))
-                ys.append(np.random.randint(playfield_top + self.radius, playfield_bottom - self.radius))
+                xs.append(np.random.randint(self.config['playfield']['left'] + self.radius,
+                                            self.config['playfield']['right'] - self.radius))
+                ys.append(np.random.randint(self.config['playfield']['top'] + self.radius,
+                                            self.config['playfield']['bottom'] - self.radius))
             else:
                 xs.append(corners[(i - (total_circles - 8)) % 4][0])
                 ys.append(corners[(i - (total_circles - 8)) % 4][1])
@@ -116,19 +113,27 @@ class Game:
                 total_circles_text = self.font.render(
                     f"Circle: {run + 1}/{total_circles}",
                     True, (255, 255, 255))
+                self.clock.tick()
+                fps_text = self.font.render(
+                    f"{self.clock.get_fps():.2f} FPS",
+                    True, (255, 255, 255))
 
                 self.screen.fill((0, 0, 0))
                 if param_plot_image is not None:
                     self.screen.blit(param_plot_image,
-                                     (20, self.display_height // 2 - param_plot_image.get_height() // 2))
-                    self.screen.blit(error_plot_image, (self.display_width - error_plot_image.get_width(),
+                                     (self.config['playfield']['left'] - param_plot_image.get_width(),
+                                      self.display_height // 2 - param_plot_image.get_height() // 2))
+                    self.screen.blit(error_plot_image, (self.config['playfield']['right'],
                                                         self.display_height // 2 - error_plot_image.get_height() // 2))
-                pygame.draw.line(self.screen, (255, 255, 255), (playfield_left, playfield_top),
-                                 (playfield_right, playfield_top))
-                pygame.draw.line(self.screen, (255, 255, 255), (playfield_left, playfield_top),
-                                 (playfield_left, playfield_bottom))
-                pygame.draw.line(self.screen, (255, 255, 255), (playfield_right, playfield_top),
-                                 (playfield_right, playfield_bottom))
+                pygame.draw.line(self.screen, (255, 255, 255),
+                                 (self.config['playfield']['left'], self.config['playfield']['top']),
+                                 (self.config['playfield']['right'], self.config['playfield']['top']))
+                pygame.draw.line(self.screen, (255, 255, 255),
+                                 (self.config['playfield']['left'], self.config['playfield']['top']),
+                                 (self.config['playfield']['left'], self.config['playfield']['bottom']))
+                pygame.draw.line(self.screen, (255, 255, 255),
+                                 (self.config['playfield']['right'], self.config['playfield']['top']),
+                                 (self.config['playfield']['right'], self.config['playfield']['bottom']))
 
                 if self.prev_x is not None:
                     pygame.draw.line(self.screen, (40, 40, 40), (self.prev_x, self.prev_y), (x, y), 2)
@@ -151,6 +156,7 @@ class Game:
                 self.screen.blit(total_steps_text, (self.display_width - 220, 90))
                 self.screen.blit(buffer_size_text, (self.display_width - 220, 110))
                 self.screen.blit(circles_since_start_text, (self.display_width - 220, 130))
+                self.screen.blit(fps_text, (self.display_width - 220, self.display_height - 30))
                 pygame.display.update()
                 for event in pygame.event.get():
                     if event.type == pygame.KEYDOWN:
@@ -184,7 +190,7 @@ class Plotting:
         self.reg_error_history.append(error)
 
     def plot_params(self):
-        fig, ax = plt.subplots(5, 1, figsize=(4, 12))
+        fig, ax = plt.subplots(5, 1, figsize=(4.1, 12))
         fig.tight_layout(pad=1.5)
         fig.set_facecolor('black')
         ax = ax.flatten()
@@ -201,12 +207,12 @@ class Plotting:
         return self.fig_to_plot_image(fig)
 
     def plot_errors(self):
-        fig, ax = plt.subplots(2, 1, figsize=(4, 4))
+        fig, ax = plt.subplots(2, 1, figsize=(4.1, 4))
         fig.tight_layout(pad=1.5)
         fig.set_facecolor('black')
         ax = ax.flatten()
         ax[0].plot(self.error_history, color='white')
-        ax[0].set_title('Error (last run)', color='white')
+        ax[0].set_title('Error (Last Run)', color='white')
         ax[0].set_facecolor('black')
         ax[0].xaxis.label.set_color('white')
         ax[0].yaxis.label.set_color('white')
@@ -216,7 +222,7 @@ class Plotting:
             ax[0].spines[spine].set_color('white')
 
         ax[1].plot(self.reg_error_history, color='white')
-        ax[1].set_title('Regression Error (buffer)', color='white')
+        ax[1].set_title('Regression Error (Buffer)', color='white')
         ax[1].set_facecolor('black')
         ax[1].xaxis.label.set_color('white')
         ax[1].yaxis.label.set_color('white')
@@ -269,6 +275,16 @@ def run_configurator():
     if input("Is this correct (y/n)?") == 'y':
         config['tablet'] = tablet
         config['probe'] = probe
+
+        playfield = {}
+        playfield['height'] = 0.92 * config['display']['res_height']
+        playfield['width'] = 4 / 3 * playfield['height']
+        playfield['top'] = config['display']['res_height'] - playfield['height']
+        playfield['left'] = (config['display']['res_width'] - playfield['width']) / 2
+        playfield['right'] = playfield['left'] + playfield['width']
+        playfield['bottom'] = config['display']['res_height']
+
+        config['playfield'] = playfield
         with open('config.json', 'w') as f:
             json.dump(config, f, indent=4)
         return config
@@ -315,6 +331,16 @@ def main():
     else:
         with open('config.json', 'r') as f:
             config = json.load(f)
+        if 'playfield' not in config:
+            playfield = {}
+            playfield['height'] = 0.92 * config['display']['res_height']
+            playfield['width'] = 4 / 3 * playfield['height']
+            playfield['top'] = config['display']['res_height'] - playfield['height']
+            playfield['left'] = (config['display']['res_width'] - playfield['width']) / 2
+            playfield['right'] = playfield['left'] + playfield['width']
+            playfield['bottom'] = config['display']['res_height']
+
+            config['playfield'] = playfield
 
     if 'data.json' not in os.listdir():
         data = {'last_params': {}, 'total_steps': 0, 'mouse_pos': [], 'circle_pos': []}
