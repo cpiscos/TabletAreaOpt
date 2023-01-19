@@ -333,8 +333,8 @@ def main():
                                    'center_x': params[2],
                                    'center_y': params[3],
                                    'rotation': params[4]}
-            # with open('data.json', 'w') as f:
-            #     json.dump(data, f)
+            with open('data.json', 'w') as f:
+                json.dump(data, f)
 
         print("total time between runs: ", time.time() - start_time)
         results = run_game(config, plots, screen, font, data, prev_mouse_pos, params, CIRCLES_PER_RUN)
