@@ -12,8 +12,8 @@ from TabletAreaOpt.utils import remap_cursor_position, convert_to_pixel_coordina
 from scipy.optimize import minimize
 
 DEBUG = False
-CIRCLES_PER_RUN = 50 if not DEBUG else 10
-BUFFER_SIZE = 500
+CIRCLES_PER_RUN = 25 if not DEBUG else 10
+BUFFER_SIZE = 1000
 DISTANCE_FACTOR = 1
 OPTIMIZATION_ITERATIONS = 1
 
