@@ -202,6 +202,7 @@ class Plotting:
             ax[i].yaxis.label.set_color('white')
             ax[i].tick_params(axis='x', colors='white')
             ax[i].tick_params(axis='y', colors='white')
+            ax[i].yaxis.set_major_formatter(plt.FormatStrFormatter('%.2f'))
             for spine in ['top', 'right', 'bottom', 'left']:
                 ax[i].spines[spine].set_color('white')
         return self.fig_to_plot_image(fig)
