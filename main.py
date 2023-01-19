@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import time
@@ -10,7 +11,8 @@ from functools import partial
 from TabletAreaOpt.utils import remap_cursor_position, convert_to_pixel_coordinates
 from scipy.optimize import minimize
 
-CIRCLES_PER_RUN = 50
+DEBUG = False
+CIRCLES_PER_RUN = 50 if not DEBUG else 10
 BUFFER_SIZE = 500
 DISTANCE_FACTOR = 1
 OPTIMIZATION_ITERATIONS = 1
@@ -135,8 +137,7 @@ class Game:
                                  (self.config['playfield']['right'], self.config['playfield']['top']),
                                  (self.config['playfield']['right'], self.config['playfield']['bottom']))
 
-                if self.prev_x is not None:
-                    pygame.draw.line(self.screen, (40, 40, 40), (self.prev_x, self.prev_y), (x, y), 2)
+                pygame.draw.line(self.screen, (100, 0, 0), (cursor_pos[0], cursor_pos[1]), (x, y), 2)
                 if run < total_circles - 1:
                     pygame.draw.line(self.screen, (40, 40, 40), (x, y), (xs[run + 1], ys[run + 1]), 5)
                     pygame.draw.circle(self.screen, self.colors[(run + 1) % len(self.colors)],
@@ -393,8 +394,9 @@ def main():
                                    'center_x': params[2],
                                    'center_y': params[3],
                                    'rotation': params[4]}
-            with open('data.json', 'w') as f:
-                json.dump(data, f)
+            if not DEBUG:
+                with open('data.json', 'w') as f:
+                    json.dump(data, f)
 
         print("total time between runs: ", time.time() - start_time)
         results = game.run_game(data, prev_mouse_pos, params, CIRCLES_PER_RUN)
@@ -402,17 +404,20 @@ def main():
         if results is None:
             break
         mouse_pos, circle_pos = results
-        data['mouse_pos'].extend(mouse_pos)
-        data['circle_pos'].extend(circle_pos)
+        data['mouse_pos'].extend(mouse_pos.copy())
+        data['circle_pos'].extend(circle_pos.copy())
 
         mouse_pos, circle_pos = np.array(mouse_pos), np.array(circle_pos)
         error = objective_function(params, mouse_pos, circle_pos, config=config, mean=True).item()
         game.plots.add_error(error)
         data['total_steps'] += 1
+        # randomize prev_mouse_pos and prev_circle_pos
 
         if prev_mouse_pos is not None:
-            mouse_pos = np.concatenate((prev_mouse_pos, mouse_pos))[-BUFFER_SIZE:]
-            circle_pos = np.concatenate((prev_circle_pos, circle_pos))[-BUFFER_SIZE:]
+            prev_mouse_pos = mouse_pos[np.random.choice(len(mouse_pos), min(len(mouse_pos), BUFFER_SIZE-CIRCLES_PER_RUN), replace=False)]
+            prev_circle_pos = circle_pos[np.random.choice(len(circle_pos), min(len(circle_pos), BUFFER_SIZE-CIRCLES_PER_RUN), replace=False)]
+            mouse_pos = np.concatenate((prev_mouse_pos, mouse_pos))
+            circle_pos = np.concatenate((prev_circle_pos, circle_pos))
         prev_mouse_pos, prev_circle_pos = mouse_pos, circle_pos
         print("time 1: ", time.time() - start_time)
 
