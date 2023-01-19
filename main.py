@@ -15,8 +15,10 @@ BUFFER_SIZE = 500
 DISTANCE_FACTOR = 1
 OPTIMIZATION_ITERATIONS = 1
 
+prev_x, prev_y = None, None
 
 def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_circles):
+    global prev_x, prev_y
     start_time = time.time()
     area_width = params[0]
     area_height = params[1]
@@ -35,7 +37,6 @@ def run_game(config, plots, screen, font, data, prev_mouse_pos, params, total_ci
     next_color = (0, 255, 0)
     colors = [color, next_color]
 
-    prev_x, prev_y = None, None
     xs, ys = [], []
     corners = [(420 + radius, radius), (420 + radius, 1440 - radius), (2560 - 420 - radius, 1440 - radius),
                (2560 - 420 - radius, radius)]
