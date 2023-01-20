@@ -21,7 +21,7 @@ OSU_SONG_DIR = r'C:\Users\Chris\AppData\Local\osu!\Songs'
 
 
 class Game:
-    def __init__(self, config):
+    def __init__(self, config, CS=4):
         pygame.init()
         window_size = (config['display']['res_width'], config['display']['res_height'])
         self.screen = pygame.display.set_mode(window_size)
@@ -35,7 +35,7 @@ class Game:
 
         self.plots = Plotting()
         self.display_width, self.display_height = config['display']['res_width'], config['display']['res_height']
-        self.radius = 90 * self.display_width / 2560
+        self.radius = (54.4 - 4.48 * CS) * self.config['playfield']['width'] / 640
         self.cursor_radius = 20 * self.display_width / 2560
         circle_color = (0, 0, 255)
         next_circle_color = (0, 255, 0)
@@ -426,7 +426,8 @@ def main():
         if mouse_pos is None:
             params = first_param
         else:
-            obj_function = partial(objective_function, mouse_pos_ar=mouse_pos, circle_pos_ar=circle_pos, config=config)
+            obj_function = partial(objective_function, mouse_pos_ar=mouse_pos, circle_pos_ar=circle_pos, config=config,
+                                   radius=game.radius)
             params = None
             y_min = 1e6
             x_test = np.random.uniform(bounds[:, 0], bounds[:, 1], size=(2000, 5))
