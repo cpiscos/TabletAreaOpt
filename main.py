@@ -13,19 +13,25 @@ from TabletAreaOpt.hit_objects import get_osu_filepaths, parse_hit_objects
 from scipy.optimize import minimize
 
 DEBUG = False
-CIRCLES_PER_RUN = 25 if not DEBUG else 10
-BUFFER_SIZE = 1000
+CIRCLES_PER_RUN = 30 if not DEBUG else 10
+BUFFER_SIZE = 600
 DISTANCE_FACTOR = 1
 OPTIMIZATION_ITERATIONS = 1
-OSU_SONG_DIR = r'C:\Users\Chris\AppData\Local\osu!\Songs'
+NUM_RESTARTS = 3
+OSU_SONG_DIR = fr'C:\Users\{os.getlogin()}\AppData\Local\osu!\Songs'
+OTD_PRESET_PATH = fr'C:\Users\{os.getlogin()}\AppData\Local\OpenTabletDriver\Presets\opt.json'
 
 
 class Game:
     def __init__(self, config, CS=4):
         pygame.init()
-        window_size = (config['display']['res_width'], config['display']['res_height'])
-        self.screen = pygame.display.set_mode(window_size)
+        # window_size = (config['display']['res_width'], config['display']['res_height'])
+        # self.screen = pygame.display.set_mode(window_size)
+        # fullscreen
+        self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        assert self.screen.get_size() == (config['display']['res_width'], config['display']['res_height'])
         self.font = pygame.font.Font(None, 24)
+        self.large_font = pygame.font.Font(None, 100)
         pygame.mouse.set_visible(False)
 
         self.config = config
@@ -83,13 +89,19 @@ class Game:
         hit_objects = None
         while hit_objects is None:
             try:
-                hit_objects_ = parse_hit_objects(self.osu_filepaths[np.random.randint(len(self.osu_filepaths))],
-                                                 self.config)
-                idx = np.random.randint(len(hit_objects_) - 20)
-                hit_objects_ = hit_objects_[idx:idx + 20]
-                assert len(hit_objects_) == 20
+                idx = np.random.randint(len(self.osu_filepaths))
+                hit_objects_ = parse_hit_objects(self.osu_filepaths[idx], self.config)
+                # ensure angle between consecutive hit objects are all < 90 degrees
+
+                if len(hit_objects_) < CIRCLES_PER_RUN:
+                    self.osu_filepaths.pop(idx)
+                    print('removed, now:', len(self.osu_filepaths))
+                    continue
+                idx = np.random.randint(len(hit_objects_) - CIRCLES_PER_RUN)
+                hit_objects_ = hit_objects_[idx:idx + CIRCLES_PER_RUN]
+                if len(np.unique(hit_objects_, axis=0)) != CIRCLES_PER_RUN:
+                    continue
                 hit_objects = hit_objects_.tolist()
-                print(hit_objects)
             except Exception as e:
                 print(e)
                 continue
@@ -191,17 +203,84 @@ class Game:
                                     int(self.config['playfield']['bottom'] + self.radius),
                                     (255, 255, 255))
 
+                # if run < total_circles - 3:
+                #     pygame.gfxdraw.line(self.screen, int(xs[run + 2]), int(ys[run + 2]), int(xs[run + 3]),
+                #                         int(ys[run + 3]),
+                #                         (40, 40, 40))
+                # if run < total_circles - 3:
+                #     if not (run % 3) == 0:
+                #         pygame.gfxdraw.line(self.screen, int(xs[run + 2]), int(ys[run + 2]), int(xs[run + 3]),
+                #                             int(ys[run + 3]),
+                #                             (80, 80, 80))
+                if run < total_circles - 2:
+                    pygame.gfxdraw.line(self.screen, int(xs[run + 1]), int(ys[run + 1]), int(xs[run + 2]),
+                                        int(ys[run + 2]),
+                                        (160, 160, 160))
                 if run < total_circles - 1:
-                    pygame.gfxdraw.line(self.screen, int(x), int(y), int(xs[run + 1]), int(ys[run + 1]), (40, 40, 40))
+                    pygame.gfxdraw.line(self.screen, int(x), int(y), int(xs[run + 1]), int(ys[run + 1]),
+                                        (255, 255, 255))
+                # if run < total_circles - 3:
+                #     pygame.gfxdraw.filled_circle(self.screen, int(xs[run + 3]), int(ys[run + 3]), int(self.radius),
+                #                                  self.colors[((run + 3) // 2) % len(self.colors)])
+                # if run < total_circles - 3:
+                #     pygame.gfxdraw.filled_circle(self.screen, int(xs[run + 3]), int(ys[run + 3]), int(self.radius),
+                #                                  self.colors[((run + 3) // 3) % len(self.colors)])
+                #     pygame.gfxdraw.filled_circle(self.screen, int(xs[run + 3]), int(ys[run + 3]),
+                #                                  int(self.radius // 1.5),
+                #                                  (0, 0, 0))
+                #     hit_3_text = self.large_font.render(str((run + 3) % 3 + 1), True, (255, 255, 255))
+                #     hit_3_text_rect = hit_3_text.get_rect()
+                #     hit_3_text_rect.center = (int(xs[run + 3]), int(ys[run + 3]))
+                #     self.screen.blit(hit_3_text, hit_3_text_rect)
+                #     pygame.gfxdraw.aacircle(self.screen, int(xs[run + 3]), int(ys[run + 3]), int(self.radius),
+                #                             self.colors[((run + 3) // 3) % len(self.colors)])
+                #     pygame.gfxdraw.filled_circle(self.screen, int(xs[run + 3]), int(ys[run + 3]),
+                #                                  int(self.radius * 1.1),
+                #                                  (0, 0, 0, 210))
+                if run < total_circles - 2:
+                    pygame.gfxdraw.filled_circle(self.screen, int(xs[run + 2]), int(ys[run + 2]), int(self.radius),
+                                                 self.colors[((run + 2) // 3) % len(self.colors)])
+                    pygame.gfxdraw.filled_circle(self.screen, int(xs[run + 2]), int(ys[run + 2]),
+                                                 int(self.radius // 1.5),
+                                                 (0, 0, 0))
+                    hit_2_text = self.large_font.render(str((run + 2) % 3 + 1), True, (255, 255, 255))
+                    hit_2_text_rect = hit_2_text.get_rect()
+                    hit_2_text_rect.center = (int(xs[run + 2]), int(ys[run + 2]))
+                    self.screen.blit(hit_2_text, hit_2_text_rect)
+                    pygame.gfxdraw.aacircle(self.screen, int(xs[run + 2]), int(ys[run + 2]), int(self.radius * 1.5),
+                                            self.colors[((run + 2) // 3) % len(self.colors)])
+                if run < total_circles - 1:
                     pygame.gfxdraw.filled_circle(self.screen, int(xs[run + 1]), int(ys[run + 1]), int(self.radius),
-                                                 self.colors[(run + 1) % len(self.colors)])
+                                                 self.colors[((run + 1) // 3) % len(self.colors)])
+                    pygame.gfxdraw.filled_circle(self.screen, int(xs[run + 1]), int(ys[run + 1]),
+                                                 int(self.radius // 1.5),
+                                                 (0, 0, 0))
+                    hit_1_text = self.large_font.render(str((run + 1) % 3 + 1), True, (255, 255, 255))
+                    hit_1_text_rect = hit_1_text.get_rect()
+                    hit_1_text_rect.center = (int(xs[run + 1]), int(ys[run + 1]))
+                    self.screen.blit(hit_1_text, hit_1_text_rect)
+                    pygame.gfxdraw.aacircle(self.screen, int(xs[run + 1]), int(ys[run + 1]), int(self.radius * 1.3),
+                                            self.colors[((run + 1) // 3) % len(self.colors)])
 
                 pygame.gfxdraw.filled_circle(self.screen, int(x), int(y), int(self.radius),
-                                             self.colors[run % len(self.colors)])
-                pygame.gfxdraw.filled_circle(self.screen, int(x), int(y), int(self.radius // 3), (0, 0, 0))
+                                             self.colors[(run // 3) % len(self.colors)])
+                # ring around the current circle
+                pygame.gfxdraw.aacircle(self.screen, int(x), int(y), int(self.radius * 1.1),
+                                        self.colors[(run // 3) % len(self.colors)])
+
+                pygame.gfxdraw.filled_circle(self.screen, int(x), int(y), int(self.radius // 1.5),
+                                             (0, 0, 0))
+
+                hit_text = self.large_font.render(str(run % 3 + 1), True, (255, 255, 255))
+                hit_text_rect = hit_text.get_rect()
+                hit_text_rect.center = (int(x), int(y))
+                self.screen.blit(hit_text, hit_text_rect)
+                # circle border
+                pygame.gfxdraw.aacircle(self.screen, int(x), int(y), int(self.radius),
+                                        self.colors[(run // 3) % len(self.colors)])
                 pygame.gfxdraw.filled_circle(self.screen, int(cursor_pos[0]), int(cursor_pos[1]),
                                              int(self.cursor_radius), (255, 0, 0))
-                pygame.gfxdraw.line(self.screen, int(cursor_pos[0]), int(cursor_pos[1]), int(x), int(y), (100, 0, 0))
+                # pygame.gfxdraw.line(self.screen, int(cursor_pos[0]), int(cursor_pos[1]), int(x), int(y), (255, 0, 0))
 
                 self.screen.blit(area_text, (self.display_width // 2 - area_text.get_width() // 2, 0))
                 self.screen.blit(self.init_text, (self.display_width // 2 - self.init_text.get_width() // 2, 40))
@@ -225,7 +304,8 @@ class Game:
                             return self.run_game(data, prev_mouse_pos, params, total_circles)
                         elif event.key == pygame.K_q:
                             return None
-
+                        elif event.key == pygame.K_p:
+                            save_params_to_preset(config=self.config, params=params)
         return mouse_pos_ar, circle_pos_ar
 
 
@@ -332,17 +412,8 @@ def run_configurator():
         config['tablet'] = tablet
         config['probe'] = probe
 
-        playfield = {}
-        playfield['height'] = 0.92 * config['display']['res_height']
-        playfield['width'] = 4 / 3 * playfield['height']
-        playfield['top'] = config['display']['res_height'] - playfield['height']
-        playfield['left'] = (config['display']['res_width'] - playfield['width']) / 2
-        playfield['right'] = playfield['left'] + playfield['width']
-        playfield['bottom'] = config['display']['res_height']
-
-        config['playfield'] = playfield
         with open('config.json', 'w') as f:
-            json.dump(config, f, indent=4)
+            json.dump(config, f, indent=2)
         return config
     else:
         return run_configurator()
@@ -369,7 +440,7 @@ def objective_function(x, mouse_pos_ar, circle_pos_ar, config, radius=90, mean=T
     if circle_pos_ar.ndim == 2:
         circle_pos_ar = circle_pos_ar[None, :, :]
     dist = np.linalg.norm(predicted_cursor_pos - circle_pos_ar, axis=2) / radius
-    # dist = np.clip(dist, 0, 5)
+    dist = np.clip(dist - 1, 0, None)
     dist_from_center = np.linalg.norm(circle_pos_ar - np.array([config['display']['res_width'] / 2,
                                                                 config['display']['res_height'] / 2])[None, None, :],
                                       axis=2) / radius
@@ -387,17 +458,16 @@ def main():
     else:
         with open('config.json', 'r') as f:
             config = json.load(f)
-        if 'playfield' not in config:
-            playfield = {}
-            playfield['height'] = 0.80 * config['display']['res_height']
-            playfield['width'] = 4 / 3 * playfield['height']
-            playfield['top'] = (config['display']['res_height'] - playfield['height']) * 4 / 7
-            playfield['bottom'] = playfield['top'] + playfield['height']
+        playfield = {}
+        playfield['height'] = 0.80 * config['display']['res_height']
+        playfield['width'] = 4 / 3 * playfield['height']
+        playfield['top'] = (config['display']['res_height'] - playfield['height']) * 4 / 7
+        playfield['bottom'] = playfield['top'] + playfield['height']
 
-            playfield['left'] = (config['display']['res_width'] - playfield['width']) / 2
-            playfield['right'] = playfield['left'] + playfield['width']
+        playfield['left'] = (config['display']['res_width'] - playfield['width']) / 2
+        playfield['right'] = playfield['left'] + playfield['width']
 
-            config['playfield'] = playfield
+        config['playfield'] = playfield
 
     if 'data.json' not in os.listdir():
         data = {'last_params': {}, 'total_steps': 0, 'mouse_pos': [], 'circle_pos': []}
@@ -420,8 +490,15 @@ def main():
     prev_mouse_pos, prev_circle_pos = None, None
     start_time = time.time()
     if len(data['mouse_pos']) > 0:
-        prev_mouse_pos = np.array(data['mouse_pos'])[-BUFFER_SIZE:]
-        prev_circle_pos = np.array(data['circle_pos'])[-BUFFER_SIZE:]
+        prev_mouse_pos = np.array(data['mouse_pos'])
+        prev_circle_pos = np.array(data['circle_pos'])
+        if len(prev_mouse_pos) > BUFFER_SIZE:
+            p = (1 - CIRCLES_PER_RUN / BUFFER_SIZE) ** (np.arange(len(data['mouse_pos']))[::-1] / CIRCLES_PER_RUN)
+            indices = np.random.choice(len(data['mouse_pos']), size=BUFFER_SIZE, replace=False,
+                                       p=p / np.sum(p))
+            prev_mouse_pos = prev_mouse_pos[indices]
+            prev_circle_pos = prev_circle_pos[indices]
+
     while True:
         if mouse_pos is None:
             params = first_param
@@ -430,19 +507,20 @@ def main():
                                    radius=game.radius)
             params = None
             y_min = 1e6
-            x_test = np.random.uniform(bounds[:, 0], bounds[:, 1], size=(2000, 5))
-            print("time 2: ", time.time() - start_time)
-            for i in range(OPTIMIZATION_ITERATIONS):
-                ys = obj_function(x_test)
-                x_test = x_test[ys.argsort()]
-                res = minimize(obj_function, x_test[0], bounds=bounds, method='L-BFGS-B')
-                if res.fun < y_min:
-                    y_min = res.fun
-                    params = res.x
-                    print(f"{i}: {y_min}, {params}")
-                if i < OPTIMIZATION_ITERATIONS - 1:
-                    x_test = x_test[:500]
-                    x_test = np.random.normal(res.x, x_test.std(0), size=(2000, 5))
+            for _ in range(NUM_RESTARTS):
+                x_test = np.random.uniform(bounds[:, 0], bounds[:, 1], size=(2000, 5))
+                print("time 2: ", time.time() - start_time)
+                for i in range(OPTIMIZATION_ITERATIONS):
+                    ys = obj_function(x_test)
+                    x_test = x_test[ys.argsort()]
+                    res = minimize(obj_function, x_test[0], bounds=bounds, method='L-BFGS-B')
+                    if res.fun < y_min:
+                        y_min = res.fun
+                        params = res.x
+                        print(f"{i}: {y_min}, {params}")
+                    if i < OPTIMIZATION_ITERATIONS - 1:
+                        x_test = x_test[:500]
+                        x_test = np.random.normal(res.x, x_test.std(0), size=(2000, 5))
             game.plots.add_param(params)
             game.plots.add_reg_error(y_min)
             data['last_params'] = {'width'   : params[0],
@@ -477,6 +555,24 @@ def main():
             circle_pos = np.concatenate((prev_circle_pos, circle_pos))
         prev_mouse_pos, prev_circle_pos = mouse_pos, circle_pos
         print("time 1: ", time.time() - start_time)
+
+
+def save_params_to_preset(config, params):
+    with open(OTD_PRESET_PATH, 'r') as f:
+        otd_preset = json.load(f)
+        profile = None
+        for p in otd_preset['Profiles']:
+            if p['Tablet'] == config['tablet']['name']:
+                profile = p
+                break
+    tablet_settings = profile['AbsoluteModeSettings']['Tablet']
+    tablet_settings['Width'] = float(params[0])
+    tablet_settings['Height'] = float(params[1])
+    tablet_settings['X'] = float(params[2])
+    tablet_settings['Y'] = float(params[3])
+    tablet_settings['Rotation'] = float(params[4])
+    with open(OTD_PRESET_PATH, 'w') as f:
+        json.dump(otd_preset, f, indent=2)
 
 
 if __name__ == '__main__':
