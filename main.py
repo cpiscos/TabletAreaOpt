@@ -47,7 +47,7 @@ class Game:
         next_circle_color = (0, 255, 0)
         self.colors = [circle_color, next_circle_color]
         self.init_text = self.font.render(
-            f"Press Z or X on the circle with a black center. Aim for the center. (R to restart run/Q to quit)",
+            f"Press Z or X on the circle with a black center. Aim for the center. (R to restart run/Q to quit/P to export)",
             True,
             (255, 255, 255))
         self.clock = pygame.time.Clock()
