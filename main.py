@@ -562,7 +562,7 @@ def save_params_to_preset(config, params):
         otd_preset = json.load(f)
         profile = None
         for p in otd_preset['Profiles']:
-            if p['Tablet'] == config['tablet']['name']:
+            if p['Tablet'] == config['tablet']['name'] or len(otd_preset['Profiles']) == 1:
                 profile = p
                 break
     tablet_settings = profile['AbsoluteModeSettings']['Tablet']
