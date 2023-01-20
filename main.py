@@ -9,6 +9,7 @@ from matplotlib import pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from functools import partial
 from TabletAreaOpt.utils import remap_cursor_position, convert_to_pixel_coordinates
+from TabletAreaOpt.hit_objects import get_osu_filepaths, parse_hit_objects
 from scipy.optimize import minimize
 
 DEBUG = False
@@ -16,6 +17,7 @@ CIRCLES_PER_RUN = 25 if not DEBUG else 10
 BUFFER_SIZE = 1000
 DISTANCE_FACTOR = 1
 OPTIMIZATION_ITERATIONS = 1
+OSU_SONG_DIR = r'C:\Users\Chris\AppData\Local\osu!\Songs'
 
 
 class Game:
@@ -33,7 +35,7 @@ class Game:
 
         self.plots = Plotting()
         self.display_width, self.display_height = config['display']['res_width'], config['display']['res_height']
-        self.radius = 80 * self.display_width / 2560
+        self.radius = 90 * self.display_width / 2560
         self.cursor_radius = 20 * self.display_width / 2560
         circle_color = (0, 0, 255)
         next_circle_color = (0, 255, 0)
@@ -43,8 +45,9 @@ class Game:
             True,
             (255, 255, 255))
         self.clock = pygame.time.Clock()
+        self.osu_filepaths = get_osu_filepaths(OSU_SONG_DIR)
 
-    def run_game(self, data, prev_mouse_pos, params, total_circles):
+    def run_game(self, data, prev_mouse_pos, params, total_circles, random_gen=False):
         start_time = time.time()
         area_width = params[0]
         area_height = params[1]
@@ -72,20 +75,38 @@ class Game:
 
         xs, ys = [], []
         # counterclockwise rotation from top left
-        corners = [(self.config['playfield']['left'] + self.radius, self.config['playfield']['top'] + self.radius),
-                   (self.config['playfield']['left'] + self.radius, self.config['playfield']['bottom'] - self.radius),
-                   (self.config['playfield']['right'] - self.radius, self.config['playfield']['bottom'] - self.radius),
-                   (self.config['playfield']['right'] - self.radius, self.config['playfield']['top'] + self.radius)]
+        corners = [(self.config['playfield']['left'], self.config['playfield']['top']),
+                   (self.config['playfield']['left'], self.config['playfield']['bottom']),
+                   (self.config['playfield']['right'], self.config['playfield']['bottom']),
+                   (self.config['playfield']['right'], self.config['playfield']['top'])]
+
+        hit_objects = None
+        while hit_objects is None:
+            try:
+                hit_objects_ = parse_hit_objects(self.osu_filepaths[np.random.randint(len(self.osu_filepaths))],
+                                                 self.config)
+                idx = np.random.randint(len(hit_objects_) - 20)
+                hit_objects_ = hit_objects_[idx:idx + 20]
+                assert len(hit_objects_) == 20
+                hit_objects = hit_objects_.tolist()
+                print(hit_objects)
+            except Exception as e:
+                print(e)
+                continue
 
         for i in range(total_circles):
             if i == 0:
                 xs.append(self.display_width / 2)
                 ys.append(self.display_height - self.config['playfield']['height'] / 2)
-            elif i < total_circles - 8:
-                xs.append(np.random.randint(self.config['playfield']['left'] + self.radius,
-                                            self.config['playfield']['right'] - self.radius))
-                ys.append(np.random.randint(self.config['playfield']['top'] + self.radius,
-                                            self.config['playfield']['bottom'] - self.radius))
+            elif i < total_circles - 4:
+                if random_gen:
+                    xs.append(np.random.randint(self.config['playfield']['left'],
+                                                self.config['playfield']['right']))
+                    ys.append(np.random.randint(self.config['playfield']['top'],
+                                                self.config['playfield']['bottom']))
+                else:
+                    xs.append(hit_objects[i - 1][0])
+                    ys.append(hit_objects[i - 1][1])
             else:
                 xs.append(corners[(i - (total_circles - 8)) % 4][0])
                 ys.append(corners[(i - (total_circles - 8)) % 4][1])
@@ -123,9 +144,9 @@ class Game:
                 self.screen.fill((0, 0, 0))
                 if param_plot_image is not None:
                     self.screen.blit(param_plot_image,
-                                     (self.config['playfield']['left'] - param_plot_image.get_width(),
+                                     (self.config['playfield']['left'] - param_plot_image.get_width() - self.radius,
                                       self.display_height // 2 - param_plot_image.get_height() // 2))
-                    self.screen.blit(error_plot_image, (self.config['playfield']['right'],
+                    self.screen.blit(error_plot_image, (self.config['playfield']['right'] + self.radius,
                                                         self.display_height // 2 - error_plot_image.get_height() // 2))
                 # pygame.draw.line(self.screen, (255, 255, 255),
                 #                  (self.config['playfield']['left'], self.config['playfield']['top']),
@@ -149,24 +170,37 @@ class Game:
                 # pygame.draw.line(self.screen, (100, 0, 0), (cursor_pos[0], cursor_pos[1]), (x, y), 2)
 
                 # with pygame.gfxdraw
-                pygame.gfxdraw.line(self.screen, int(self.config['playfield']['left']), int(self.config['playfield']['top']),
-                                    int(self.config['playfield']['right']), int(self.config['playfield']['top']),
+                pygame.gfxdraw.line(self.screen, int(self.config['playfield']['left'] - self.radius),
+                                    int(self.config['playfield']['top'] - self.radius),
+                                    int(self.config['playfield']['right'] + self.radius),
+                                    int(self.config['playfield']['top'] - self.radius),
                                     (255, 255, 255))
-                pygame.gfxdraw.line(self.screen, int(self.config['playfield']['left']), int(self.config['playfield']['top']),
-                                    int(self.config['playfield']['left']), int(self.config['playfield']['bottom']),
+                pygame.gfxdraw.line(self.screen, int(self.config['playfield']['left'] - self.radius),
+                                    int(self.config['playfield']['top'] - self.radius),
+                                    int(self.config['playfield']['left'] - self.radius),
+                                    int(self.config['playfield']['bottom'] + self.radius),
                                     (255, 255, 255))
-                pygame.gfxdraw.line(self.screen, int(self.config['playfield']['right']), int(self.config['playfield']['top']),
-                                    int(self.config['playfield']['right']), int(self.config['playfield']['bottom']),
+                pygame.gfxdraw.line(self.screen, int(self.config['playfield']['right'] + self.radius),
+                                    int(self.config['playfield']['top'] - self.radius),
+                                    int(self.config['playfield']['right'] + self.radius),
+                                    int(self.config['playfield']['bottom'] + self.radius),
+                                    (255, 255, 255))
+                pygame.gfxdraw.line(self.screen, int(self.config['playfield']['left'] - self.radius),
+                                    int(self.config['playfield']['bottom'] + self.radius),
+                                    int(self.config['playfield']['right'] + self.radius),
+                                    int(self.config['playfield']['bottom'] + self.radius),
                                     (255, 255, 255))
 
                 if run < total_circles - 1:
                     pygame.gfxdraw.line(self.screen, int(x), int(y), int(xs[run + 1]), int(ys[run + 1]), (40, 40, 40))
                     pygame.gfxdraw.filled_circle(self.screen, int(xs[run + 1]), int(ys[run + 1]), int(self.radius),
-                                                    self.colors[(run + 1) % len(self.colors)])
+                                                 self.colors[(run + 1) % len(self.colors)])
 
-                pygame.gfxdraw.filled_circle(self.screen, int(x), int(y), int(self.radius), self.colors[run % len(self.colors)])
+                pygame.gfxdraw.filled_circle(self.screen, int(x), int(y), int(self.radius),
+                                             self.colors[run % len(self.colors)])
                 pygame.gfxdraw.filled_circle(self.screen, int(x), int(y), int(self.radius // 3), (0, 0, 0))
-                pygame.gfxdraw.filled_circle(self.screen, int(cursor_pos[0]), int(cursor_pos[1]), int(self.cursor_radius), (255, 0, 0))
+                pygame.gfxdraw.filled_circle(self.screen, int(cursor_pos[0]), int(cursor_pos[1]),
+                                             int(self.cursor_radius), (255, 0, 0))
                 pygame.gfxdraw.line(self.screen, int(cursor_pos[0]), int(cursor_pos[1]), int(x), int(y), (100, 0, 0))
 
                 self.screen.blit(area_text, (self.display_width // 2 - area_text.get_width() // 2, 0))
@@ -314,7 +348,7 @@ def run_configurator():
         return run_configurator()
 
 
-def objective_function(x, mouse_pos_ar, circle_pos_ar, config, radius=80, mean=True):
+def objective_function(x, mouse_pos_ar, circle_pos_ar, config, radius=90, mean=True):
     if type(x) == list or type(x) == tuple:
         x = np.array(x)
     if x.ndim == 1:
@@ -335,7 +369,7 @@ def objective_function(x, mouse_pos_ar, circle_pos_ar, config, radius=80, mean=T
     if circle_pos_ar.ndim == 2:
         circle_pos_ar = circle_pos_ar[None, :, :]
     dist = np.linalg.norm(predicted_cursor_pos - circle_pos_ar, axis=2) / radius
-    dist = np.clip(dist, 0, 5)
+    # dist = np.clip(dist, 0, 5)
     dist_from_center = np.linalg.norm(circle_pos_ar - np.array([config['display']['res_width'] / 2,
                                                                 config['display']['res_height'] / 2])[None, None, :],
                                       axis=2) / radius
@@ -355,12 +389,13 @@ def main():
             config = json.load(f)
         if 'playfield' not in config:
             playfield = {}
-            playfield['height'] = 0.92 * config['display']['res_height']
+            playfield['height'] = 0.80 * config['display']['res_height']
             playfield['width'] = 4 / 3 * playfield['height']
-            playfield['top'] = config['display']['res_height'] - playfield['height']
+            playfield['top'] = (config['display']['res_height'] - playfield['height']) * 4 / 7
+            playfield['bottom'] = playfield['top'] + playfield['height']
+
             playfield['left'] = (config['display']['res_width'] - playfield['width']) / 2
             playfield['right'] = playfield['left'] + playfield['width']
-            playfield['bottom'] = config['display']['res_height']
 
             config['playfield'] = playfield
 
